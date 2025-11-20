@@ -6,7 +6,7 @@ clusterGroup:
     open-cluster-management:
     vault:
     golang-external-secrets:
-    trident:
+    trident
     openshift-cnv:
   subscriptions:
     acm:
