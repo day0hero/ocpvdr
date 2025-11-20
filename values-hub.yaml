@@ -7,7 +7,6 @@ clusterGroup:
     vault:
     golang-external-secrets:
     trident:
-      operatorGroup: false
     openshift-cnv:
   subscriptions:
     acm:
@@ -20,7 +19,6 @@ clusterGroup:
       channel: stable
     trident:
       name: trident-operator
-      namespace: trident
       channel: stable
       source: certified-operators
 
