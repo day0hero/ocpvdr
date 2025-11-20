@@ -14,7 +14,7 @@ tridentFSX:
     secretName: trident-ontap-iscsi-svm
     storagePrefix: trident_iscsi
     lunsPerFlexvol: 100
-    mgmtLIF: null
+    mgmtLIF: svm-0928272f706291e52.fs-0088c417ebf9fb38a.fsx.us-west-1.amazonaws.com
     storageDriverName: ontap-san
     svm: fsx
   storageClass:
