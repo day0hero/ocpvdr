@@ -1,21 +1,23 @@
 apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
 metadata:
-  name: eso-trident-svm
+  name: eso-trident-iscsi-svm
   namespace: trident
 spec:
   secretStoreRef:
     name: {{ .Values.secretStoreRef.name }}
     kind: {{ .Values.secretStoreRef.kind }}
+{{- with .Values.tridentFSX }}
   target:
-    name: trident-ontap-iscsi-svm
+    name: {{ .iscsi.secretName }}
     creationPolicy: Owner
   data:
     - secretKey: username
       remoteRef:
-        key: {{ .Values.fsx.key }}
+        key: {{ .iscsi.key }}
         property: username
     - secretKey: password
       remoteRef:
-        key: {{ .Values.fsx.key }}
+        key: {{ .iscsi.key }}
         property: password
+{{- end }}
