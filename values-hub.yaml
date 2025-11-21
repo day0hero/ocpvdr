@@ -6,14 +6,20 @@ clusterGroup:
     open-cluster-management:
     vault:
     golang-external-secrets:
+    trident:
   subscriptions:
     acm:
       name: advanced-cluster-management
       namespace: open-cluster-management
       channel: release-2.14
       # csv: advanced-cluster-management.v2.6.1
+    trident:
+      name: trident-operator
+      namespace: openshift-operators
+      channel: stable
   argoProjects:
     - hub
+    - trident
   # Explicitly mention the cluster-state based overrides we plan to use for this pattern.
   # We can use self-referential variables because the chart calls the tpl function with these variables defined
   sharedValueFiles:
