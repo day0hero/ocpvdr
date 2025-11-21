@@ -17,6 +17,7 @@ clusterGroup:
       name: trident-operator
       namespace: openshift-operators
       channel: stable
+      source: certified-operators
   argoProjects:
     - hub
     - trident
