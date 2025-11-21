@@ -1,8 +1,8 @@
 clusterGroup:
   name: hub
   isHubCluster: true
-  includeDefaultHealthCheckOverrides: true
-  additionalHealthChecks:
+  argoCD:
+    resourceHealthChecks: 
     - kind: TridentOrchestrator
       group: trident.netap.io
       check: |
