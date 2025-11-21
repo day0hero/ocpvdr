@@ -21,6 +21,32 @@ clusterGroup:
   argoProjects:
     - hub
     - trident
+  argoCD:
+    resourceHealthChecks:
+      trident.netapp.io/TridentOrchestrator: |
+        hs = {}
+        if obj.status ~= nil and obj.status.status ~= nil then
+          if obj.status.status == "Installed" then
+            hs.status = "Healthy"
+            hs.message = "Trident installation completed successfully."
+          elseif obj.status.status == "Installing" then
+            hs.status = "Progressing"
+            hs.message = "Trident is currently installing."
+          elseif obj.status.status == "Updating" then
+            hs.status = "Progressing"
+            hs.message = "Trident is currently updating."
+          elseif obj.status.status == "Failed" then
+            hs.status = "Degraded"
+            hs.message = "Trident installation failed. Check operator logs."
+          else
+            hs.status = "Progressing"
+            hs.message = "Trident status unknown or pending."
+          end
+        else
+          hs.status = "Progressing"
+          hs.message = "Awaiting TridentOrchestrator status."
+        end
+        return hs
   # Explicitly mention the cluster-state based overrides we plan to use for this pattern.
   # We can use self-referential variables because the chart calls the tpl function with these variables defined
   sharedValueFiles:
