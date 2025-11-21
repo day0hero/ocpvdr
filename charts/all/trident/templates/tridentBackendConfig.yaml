@@ -1,0 +1,20 @@
+{{- with .Values.tridentFSX }}
+apiVersion: trident.netapp.io/v1
+kind: TridentBackendConfig
+metadata:
+  name: ontap-iscsi
+  namespace: trident
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  backendName: ontap-iscsi
+  credentials:
+    name: {{ .iscsi.secretName }}
+  defaults:
+    lunsPerFlexvol: {{ .iscsi.lunsPerFlexvol }}
+    storagePrefix: {{ .iscsi.storagePrefix }}
+  managementLIF: {{ .iscsi.mgmtLIF }}
+  storageDriverName: {{ .iscsi.storageDriverName }}
+  svm: {{ .iscsi.svm }}
+  version: 1
+{{- end }}
