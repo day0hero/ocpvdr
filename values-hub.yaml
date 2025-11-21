@@ -1,19 +1,57 @@
 clusterGroup:
   name: hub
   isHubCluster: true
+  argoCD:
+    resourceHealthChecks: 
+    - kind: TridentOrchestrator
+      group: trident.netapp.io
+      check: |
+        hs = {}
+        if obj.status ~= nil and obj.status.status ~= nil then
+          if obj.status.status == "Installed" then
+            hs.status = "Healthy"
+            hs.message = "Trident installation completed successfully."
+          elseif obj.status.status == "Installing" then
+            hs.status = "Progressing"
+            hs.message = "Trident is currently installing."
+          elseif obj.status.status == "Updating" then
+            hs.status = "Progressing"
+            hs.message = "Trident is currently updating."
+          elseif obj.status.status == "Failed" then
+            hs.status = "Degraded"
+            hs.message = "Trident installation failed. Check operator logs."
+          else
+            hs.status = "Progressing"
+            hs.message = "Trident status unknown or pending."
+          end
+        else
+          hs.status = "Progressing"
+          hs.message = "Awaiting TridentOrchestrator status."
+        end
+        return hs
+  # Explicitly mention the cluster-state based overrides we plan to use for this pattern.
+
   # Namespace is a dictionary for easier overriding (lists are supported as well)
   namespaces:
     open-cluster-management:
     vault:
     golang-external-secrets:
+    trident:
   subscriptions:
     acm:
       name: advanced-cluster-management
       namespace: open-cluster-management
       channel: release-2.14
       # csv: advanced-cluster-management.v2.6.1
+    trident:
+      name: trident-operator
+      namespace: openshift-operators
+      channel: stable
+      source: certified-operators
   argoProjects:
     - hub
+    - trident
+
   # Explicitly mention the cluster-state based overrides we plan to use for this pattern.
   # We can use self-referential variables because the chart calls the tpl function with these variables defined
   sharedValueFiles:
@@ -54,6 +92,11 @@ clusterGroup:
       argoProject: hub
       chart: golang-external-secrets
       chartVersion: 0.1.*
+    trident:
+      name: trident
+      namespace: trident
+      path: charts/all/trident
+      argoProject: trident
   imperative:
     # NOTE: We *must* use lists and not hashes. As hashes lose ordering once parsed by helm
     # The default schedule is every 10 minutes: imperative.schedule
