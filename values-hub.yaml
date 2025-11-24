@@ -29,30 +29,6 @@ clusterGroup:
           hs.message = "Awaiting TridentOrchestrator status."
         end
         return hs
-    - kind: TridentBackendConfig
-      group: trident.netapp.io
-      check: |
-        hs = {}
-        if obj.status ~= nil and obj.status.status ~= nil then
-          if obj.status.status == "Succeeded" or obj.status.status == "Bound" then
-            hs.status = "Healthy"
-            hs.message = "TridentBackendConfig is configured and ready."
-          elseif obj.status.status == "Pending" or obj.status.status == "Configuring" then
-            hs.status = "Progressing"
-            hs.message = "TridentBackendConfig is being configured."
-          elseif obj.status.status == "Failed" or obj.status.status == "Error" then
-            hs.status = "Degraded"
-            hs.message = "TridentBackendConfig configuration failed. Check backend configuration."
-          else
-            hs.status = "Progressing"
-            hs.message = "TridentBackendConfig status: " .. tostring(obj.status.status or "unknown")
-          end
-        else
-          hs.status = "Progressing"
-          hs.message = "Awaiting TridentBackendConfig status."
-        end
-        return hs
-  # Explicitly mention the cluster-state based overrides we plan to use for this pattern.
 
   # Namespace is a dictionary for easier overriding (lists are supported as well)
   namespaces:
