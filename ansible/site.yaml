@@ -2,14 +2,137 @@
 - name: Create AWS FSx for ONTAP File System
   hosts: localhost
   gather_facts: false
+  vars_files:
+    - "{{ playbook_dir }}/fsx-ontap-vars.yml"
   tasks:
     - name: Skip creation if deletion is requested
       meta: end_play
       when: delete_resources | default(false)
 
+    - name: Set vpc_name from cluster_name if cluster_name is provided
+      set_fact:
+        vpc_name: "{{ cluster_name }}-vpc"
+      when:
+        - cluster_name is defined
+        - cluster_name != ""
+        - vpc_name is not defined or vpc_name == ""
+
+    - name: Load values-global.yaml to get pattern name
+      set_fact:
+        values_global_data: "{{ lookup('file', playbook_dir + '/../values-global.yaml') | from_yaml }}"
+      when: not (delete_resources | default(false))
+
+    - name: Extract pattern name from values-global
+      set_fact:
+        pattern_name: "{{ values_global_data.global.pattern | default('ocpvdr') }}"
+      when: not (delete_resources | default(false))
+
+    - name: Check if ~/.fsx file exists
+      stat:
+        path: "{{ '~/.fsx' | expanduser }}"
+      register: fsx_file_stat
+      when: not (delete_resources | default(false))
+
+    - name: Read password from ~/.fsx file
+      slurp:
+        src: "{{ '~/.fsx' | expanduser }}"
+      register: fsx_file_content
+      when:
+        - not (delete_resources | default(false))
+        - fsx_file_stat.stat.exists | default(false)
+      failed_when: false
+
+    - name: Extract password from ~/.fsx file
+      set_fact:
+        fsx_password_from_file: "{{ fsx_file_content.content | b64decode | string | trim }}"
+      when:
+        - not (delete_resources | default(false))
+        - fsx_file_stat.stat.exists | default(false)
+        - fsx_file_content is defined
+        - fsx_file_content.content is defined
+
+    - name: Override fsx_admin_password and svm_admin_password from ~/.fsx file
+      ansible.builtin.set_fact:
+        fsx_admin_password: "{{ fsx_password_from_file }}"
+        svm_admin_password: "{{ fsx_password_from_file }}"
+      when:
+        - not (delete_resources | default(false))
+        - fsx_file_stat.stat.exists | default(false)
+        - fsx_password_from_file is defined
+        - fsx_password_from_file | length > 0
+
+    - name: Debug password from file
+      debug:
+        msg:
+          - "fsx_password_from_file: '{{ fsx_password_from_file | default('NOT SET') }}'"
+          - "fsx_admin_password: '{{ fsx_admin_password | default('NOT SET') }}'"
+          - "svm_admin_password: '{{ svm_admin_password | default('NOT SET') }}'"
+          - "fsx_file_stat.stat.exists: {{ fsx_file_stat.stat.exists | default(false) }}"
+      when: not (delete_resources | default(false))
+
+    - name: Debug final password values
+      debug:
+        var: fsx_admin_password
+      when: not (delete_resources | default(false))
+
+    - name: Debug final svm password values
+      debug:
+        var: svm_admin_password
+      when: not (delete_resources | default(false))
+
+    - name: Validate fsx_admin_password is set
+      fail:
+        msg: >
+          fsx_admin_password is required but not found.
+          Please either:
+          1. Create ~/.fsx file with the password, OR
+          2. Pass it via -e fsx_admin_password=<password> on the command line.
+      when:
+        - not (delete_resources | default(false))
+        - (fsx_admin_password is not defined or fsx_admin_password == '' or fsx_admin_password == 'null' or fsx_admin_password == None)
+
+    - name: Validate svm_admin_password is set
+      fail:
+        msg: >
+          svm_admin_password is required but not found.
+          Please either:
+          1. Create ~/.fsx file with the password, OR
+          2. Pass it via -e svm_admin_password=<password> on the command line.
+      when:
+        - not (delete_resources | default(false))
+        - (svm_admin_password is not defined or svm_admin_password == '' or svm_admin_password == 'null' or svm_admin_password == None)
+
     - name: Create FSx ONTAP filesystem
       include_role:
         name: fsx_ontap
+
+    - name: Update tridentFSX.iscsi.mgmtLIF in values-trident.yaml
+      replace:
+        path: "{{ playbook_dir }}/../values-trident.yaml"
+        regexp: '^(\s{4})mgmtLIF:\s+.*'
+        replace: '\1mgmtLIF: {{ fsx_dns_name }}'
+      when: 
+        - not (delete_resources | default(false))
+        - fsx_dns_name is defined
+        - fsx_dns_name != ""
+
+    - name: Update tridentFSX.iscsi.svm in values-trident.yaml
+      replace:
+        path: "{{ playbook_dir }}/../values-trident.yaml"
+        regexp: '^(\s{4})svm:\s+.*'
+        replace: '\1svm: {{ svm_name_result }}'
+      when:
+        - not (delete_resources | default(false))
+        - svm_name_result is defined
+        - svm_name_result != ""
+
+    - name: Display updated values
+      debug:
+        msg:
+          - "Updated values-trident.yaml:"
+          - "  mgmtLIF: {{ fsx_dns_name | default('not set') }}"
+          - "  svm: {{ svm_name_result | default('not set') }}"
+      when: not (delete_resources | default(false))
 
 - name: Delete FSx ONTAP Resources
   hosts: localhost
@@ -20,3 +143,4 @@
         name: fsx_ontap
         tasks_from: delete
       when: delete_resources | default(false)
+
