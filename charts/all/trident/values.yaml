@@ -10,11 +10,11 @@ secretStoreRef:
 # Maps to $gitroot/values-secret.yaml-template declaration
 tridentFSX:
   iscsi:
-    key: secret/data/global/trident-iscsi
+    key: secret/data/global/fsx-admin
     secretName: trident-ontap-iscsi-svm
     storagePrefix: trident_iscsi
     lunsPerFlexvol: 100
-    mgmtLIF: svm-077194fab3a68fd17.fs-00aab80f40e0eb977.fsx.us-west-1.amazonaws.com
+    mgmtLIF: ""
     storageDriverName: ontap-san
     svm: fsx
   storageClass:
