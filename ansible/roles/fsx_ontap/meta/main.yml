@@ -1,0 +1,19 @@
+---
+galaxy_info:
+  author: Your Name
+  description: Ansible role to create and manage AWS FSx for ONTAP filesystems
+  license: MIT
+  min_ansible_version: "2.9"
+  platforms:
+    - name: AWS
+      versions:
+        - all
+  galaxy_tags:
+    - aws
+    - fsx
+    - ontap
+    - storage
+    - netapp
+
+dependencies: []
+

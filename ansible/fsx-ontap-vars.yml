@@ -1,0 +1,50 @@
+---
+# Example variables file for FSx ONTAP playbook
+# Copy this file to fsx-ontap-vars.yml and update with your values
+
+# Network Configuration
+# Option 1: Provide direct IDs (uncomment and use these)
+# vpc_id: "vpc-0123456789abcdef0"
+# subnet_1_id: "subnet-0123456789abcdef0"  # Primary subnet (must be in different AZ than subnet_2)
+# subnet_2_id: "subnet-0fedcba9876543210"  # Standby subnet (must be in different AZ than subnet_1)
+# route_table_ids: 
+#   - "rtb-0123456789abcdef0"
+
+# Option 2: Look up by name or tag (uncomment and use these instead)
+vpc_name: "ontap-vpc"  # VPC name to look up
+# vpc_tag: "Name:my-vpc"  # Alternative: VPC tag key:value to look up (e.g., "Environment:prod")
+subnet_1_name: "ontap-private-us-west-1b"  # First subnet name to look up (must be in different AZ than subnet_2)
+# subnet_1_tag: "Name:ontap-private-us-west-1b"  # Alternative: First subnet tag key:value
+subnet_2_name: "ontap-private-us-west-1c"  # Second subnet name to look up (must be in different AZ than subnet_1)
+# subnet_2_tag: "Name:ontap-private-us-west-1c"  # Alternative: Second subnet tag key:value
+route_table_names:
+  - "main-route-table"  # List of route table names to look up
+# route_table_tags:
+#   - "Name:main-route-table"  # Alternative: List of route table tag key:value
+
+allowed_cidr: "10.0.0.0/16"  # CIDR range allowed to connect to FSx
+
+# FSx ONTAP Configuration
+file_system_name: "my-fsx-ontap"
+storage_capacity: 1024  # GiB (minimum 1024, maximum 196608 for SSD)
+throughput_capacity: 1024  # MBps (valid values: 512, 1024, 2048)
+storage_type: "SSD"  # SSD or HDD
+deployment_type: "MULTI_AZ_1"  # MULTI_AZ_1 or SINGLE_AZ_1
+weekly_maintenance_time: "7:01:00"  # Format: d:HH:MM in UTC (d = day of week, 0-6, Sunday=0)
+fsx_admin_password: null # Password for fsxadmin user (5-40 alphanumeric chars)
+
+# Storage Virtual Machine (SVM) Configuration
+svm_name: "SVM1"
+root_volume_security_style: "UNIX"  # UNIX, NTFS, or MIXED
+svm_admin_password: null  # Password for vsadmin user (5-40 alphanumeric chars)
+
+# AWS Region
+aws_region: "us-west-1"
+
+# Tags
+tags:
+  Name: "OntapFileSystem_MAZ"
+  Environment: "production"
+  ManagedBy: "Ansible"
+  Project: "drvirt"
+

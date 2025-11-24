@@ -1,0 +1,49 @@
+---
+# Network Configuration
+# Option 1: Provide direct IDs
+vpc_id: "vpc-xxxxxxxxxxxxxxxxx"  # Replace with your VPC ID, or use vpc_name/vpc_tag below
+subnet_1_id: "subnet-xxxxxxxxxxxxxxxxx"  # Replace with first subnet ID, or use subnet_1_name/subnet_1_tag below
+subnet_2_id: "subnet-xxxxxxxxxxxxxxxxx"  # Replace with second subnet ID, or use subnet_2_name/subnet_2_tag below
+route_table_ids: ["rtb-xxxxxxxxxxxxxxxxx"]  # Replace with route table ID(s), or use route_table_names/route_table_tags below
+
+# Option 2: Provide names/tags to look up (if IDs not provided)
+vpc_name: ""  # VPC name to look up (e.g., "my-vpc")
+vpc_tag: ""  # VPC tag key:value to look up (e.g., "Name:my-vpc" or "Environment:prod")
+subnet_1_name: ""  # First subnet name to look up (must be in different AZ than subnet_2)
+subnet_1_tag: ""  # First subnet tag key:value to look up
+subnet_2_name: ""  # Second subnet name to look up (must be in different AZ than subnet_1)
+subnet_2_tag: ""  # Second subnet tag key:value to look up
+route_table_names: []  # List of route table names to look up
+route_table_tags: []  # List of route table tag key:value to look up
+
+allowed_cidr: "10.0.0.0/16"  # CIDR range allowed to connect to FSx
+
+# FSx ONTAP Configuration
+file_system_name: "my-fsx-ontap"
+storage_capacity: 1024  # GiB (minimum 1024, maximum 196608)
+throughput_capacity: 1024  # MBps (valid values: 512, 1024, 2048)
+storage_type: "SSD"  # SSD or HDD
+deployment_type: "MULTI_AZ_1"  # MULTI_AZ_1 or SINGLE_AZ_1
+weekly_maintenance_time: "7:01:00"  # Format: d:HH:MM in UTC
+fsx_admin_password: "ChangeMe123!"  # Password for fsxadmin user
+
+# Storage Virtual Machine (SVM) Configuration
+svm_name: "SVM1"
+root_volume_security_style: "UNIX"  # UNIX, NTFS, or MIXED
+svm_admin_password: "ChangeMe123!"  # Password for vsadmin user
+
+# AWS Region
+aws_region: "us-east-1"
+
+# Secrets Manager Configuration
+create_secrets: true  # Set to false to skip creating secrets in AWS Secrets Manager
+
+# Deletion Configuration
+delete_resources: false  # Set to true to delete all resources created by this role
+
+# Tags
+tags:
+  Name: "OntapFileSystem_MAZ"
+  Environment: "production"
+  ManagedBy: "Ansible"
+

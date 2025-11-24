@@ -1,0 +1,776 @@
+---
+- name: Idempotency Check Summary
+  debug:
+    msg:
+      - "=========================================="
+      - "FSx ONTAP Role - Idempotency Check"
+      - "=========================================="
+      - "File System Name: {{ file_system_name }}"
+      - "Region: {{ aws_region }}"
+      - "This role will check for existing resources and"
+      - "only create them if they don't already exist."
+      - "=========================================="
+
+- name: Check if VPC ID needs to be looked up
+  set_fact:
+    lookup_vpc: "{{ (vpc_id is not defined or vpc_id == '' or vpc_id == 'vpc-xxxxxxxxxxxxxxxxx' or not (vpc_id | regex_search('^vpc-'))) and (vpc_name != '' or vpc_tag != '') }}"
+
+- name: Look up VPC ID by name
+  amazon.aws.ec2_vpc_net_info:
+    region: "{{ aws_region }}"
+    filters:
+      "tag:Name": "{{ vpc_name }}"
+  register: vpc_lookup_result_name
+  when: lookup_vpc | default(false) and vpc_name != ''
+
+- name: Check if name lookup found a VPC
+  set_fact:
+    vpc_found_by_name: "{{ vpc_lookup_result_name.vpcs | length > 0 }}"
+  when: lookup_vpc | default(false) and vpc_name != '' and vpc_lookup_result_name is defined
+
+- name: Set VPC ID from name lookup
+  set_fact:
+    vpc_id: "{{ vpc_lookup_result_name.vpcs[0].vpc_id }}"
+  when: lookup_vpc | default(false) and vpc_found_by_name | default(false)
+
+- name: Look up VPC ID by tag (fallback if name lookup failed)
+  amazon.aws.ec2_vpc_net_info:
+    region: "{{ aws_region }}"
+    filters:
+      "tag:{{ vpc_tag.split(':')[0] }}": "{{ vpc_tag.split(':')[1] }}"
+  register: vpc_lookup_result_tag
+  when: >
+    lookup_vpc | default(false) and
+    vpc_tag != '' and
+    not (vpc_found_by_name | default(false))
+
+- name: Set VPC ID from tag lookup
+  set_fact:
+    vpc_id: "{{ vpc_lookup_result_tag.vpcs[0].vpc_id }}"
+  when: >
+    lookup_vpc | default(false) and
+    vpc_lookup_result_tag.vpcs is defined and
+    vpc_lookup_result_tag.vpcs | length > 0 and
+    not (vpc_found_by_name | default(false))
+
+- name: Debug VPC lookup results
+  debug:
+    msg:
+      - "VPC Lookup Debug:"
+      - "  lookup_vpc: {{ lookup_vpc | default('not set') }}"
+      - "  vpc_name: {{ vpc_name | default('not set') }}"
+      - "  vpc_tag: {{ vpc_tag | default('not set') }}"
+      - "  name lookup result: {{ vpc_lookup_result_name.vpcs[0].vpc_id if (vpc_lookup_result_name.vpcs | default([]) | length > 0) else 'not found' }}"
+      - "  tag lookup result: {{ vpc_lookup_result_tag.vpcs[0].vpc_id if (vpc_lookup_result_tag.vpcs | default([]) | length > 0) else 'not found' }}"
+      - "  vpc_id after lookup: {{ vpc_id | default('not set') }}"
+  when: lookup_vpc | default(false)
+
+- name: Validate VPC ID is set
+  fail:
+    msg: >
+      VPC ID must be provided either as vpc_id or by using vpc_name/vpc_tag.
+      Lookup attempted but VPC not found. Check that:
+      - VPC exists in region {{ aws_region }}
+      - VPC has correct Name tag (if using vpc_name)
+      - VPC has correct tag (if using vpc_tag)
+      - AWS credentials have ec2:DescribeVpcs permission
+  when: vpc_id is not defined or vpc_id == '' or vpc_id == 'vpc-xxxxxxxxxxxxxxxxx'
+
+- name: Check if subnet IDs need to be looked up
+  set_fact:
+    lookup_subnet_1: "{{ (subnet_1_id is not defined or subnet_1_id == '' or subnet_1_id == 'subnet-xxxxxxxxxxxxxxxxx' or not (subnet_1_id | regex_search('^subnet-'))) and (subnet_1_name != '' or subnet_1_tag != '') }}"
+    lookup_subnet_2: "{{ (subnet_2_id is not defined or subnet_2_id == '' or subnet_2_id == 'subnet-xxxxxxxxxxxxxxxxx' or not (subnet_2_id | regex_search('^subnet-'))) and (subnet_2_name != '' or subnet_2_tag != '') }}"
+
+- name: Look up subnet 1 ID by name
+  amazon.aws.ec2_vpc_subnet_info:
+    region: "{{ aws_region }}"
+    filters:
+      vpc-id: "{{ vpc_id }}"
+      "tag:Name": "{{ subnet_1_name }}"
+  register: subnet_1_lookup_result_name
+  when: lookup_subnet_1 | default(false) and subnet_1_name != ''
+
+- name: Check if subnet 1 name lookup found a subnet
+  set_fact:
+    subnet_1_found_by_name: "{{ subnet_1_lookup_result_name.subnets | length > 0 }}"
+  when: lookup_subnet_1 | default(false) and subnet_1_name != '' and subnet_1_lookup_result_name is defined
+
+- name: Set subnet 1 ID from name lookup
+  set_fact:
+    subnet_1_id: "{{ subnet_1_lookup_result_name.subnets[0].id }}"
+  when: lookup_subnet_1 | default(false) and subnet_1_found_by_name | default(false)
+
+- name: Look up subnet 1 ID by tag (fallback if name lookup failed)
+  amazon.aws.ec2_vpc_subnet_info:
+    region: "{{ aws_region }}"
+    filters:
+      vpc-id: "{{ vpc_id }}"
+      "tag:{{ subnet_1_tag.split(':')[0] }}": "{{ subnet_1_tag.split(':')[1] }}"
+  register: subnet_1_lookup_result_tag
+  when: >
+    lookup_subnet_1 | default(false) and
+    subnet_1_tag != '' and
+    not (subnet_1_found_by_name | default(false))
+
+- name: Set subnet 1 ID from tag lookup
+  set_fact:
+    subnet_1_id: "{{ subnet_1_lookup_result_tag.subnets[0].id }}"
+  when: >
+    lookup_subnet_1 | default(false) and
+    subnet_1_lookup_result_tag.subnets is defined and
+    subnet_1_lookup_result_tag.subnets | length > 0 and
+    not (subnet_1_found_by_name | default(false))
+
+- name: Look up subnet 2 ID by name
+  amazon.aws.ec2_vpc_subnet_info:
+    region: "{{ aws_region }}"
+    filters:
+      vpc-id: "{{ vpc_id }}"
+      "tag:Name": "{{ subnet_2_name }}"
+  register: subnet_2_lookup_result_name
+  when: lookup_subnet_2 | default(false) and subnet_2_name != ''
+
+- name: Check if subnet 2 name lookup found a subnet
+  set_fact:
+    subnet_2_found_by_name: "{{ subnet_2_lookup_result_name.subnets | length > 0 }}"
+  when: lookup_subnet_2 | default(false) and subnet_2_name != '' and subnet_2_lookup_result_name is defined
+
+- name: Set subnet 2 ID from name lookup
+  set_fact:
+    subnet_2_id: "{{ subnet_2_lookup_result_name.subnets[0].id }}"
+  when: lookup_subnet_2 | default(false) and subnet_2_found_by_name | default(false)
+
+- name: Look up subnet 2 ID by tag (fallback if name lookup failed)
+  amazon.aws.ec2_vpc_subnet_info:
+    region: "{{ aws_region }}"
+    filters:
+      vpc-id: "{{ vpc_id }}"
+      "tag:{{ subnet_2_tag.split(':')[0] }}": "{{ subnet_2_tag.split(':')[1] }}"
+  register: subnet_2_lookup_result_tag
+  when: >
+    lookup_subnet_2 | default(false) and
+    subnet_2_tag != '' and
+    not (subnet_2_found_by_name | default(false))
+
+- name: Set subnet 2 ID from tag lookup
+  set_fact:
+    subnet_2_id: "{{ subnet_2_lookup_result_tag.subnets[0].id }}"
+  when: >
+    lookup_subnet_2 | default(false) and
+    subnet_2_lookup_result_tag.subnets is defined and
+    subnet_2_lookup_result_tag.subnets | length > 0 and
+    not (subnet_2_found_by_name | default(false))
+
+- name: Debug subnet lookup results
+  debug:
+    msg:
+      - "Subnet Lookup Debug:"
+      - "  lookup_subnet_1: {{ lookup_subnet_1 | default('not set') }}"
+      - "  lookup_subnet_2: {{ lookup_subnet_2 | default('not set') }}"
+      - "  subnet_1_name: {{ subnet_1_name | default('not set') }}"
+      - "  subnet_1_tag: {{ subnet_1_tag | default('not set') }}"
+      - "  subnet_1 name lookup result: {{ subnet_1_lookup_result_name.subnets[0].id if (subnet_1_lookup_result_name.subnets | default([]) | length > 0) else 'not found' }}"
+      - "  subnet_1 tag lookup result: {{ subnet_1_lookup_result_tag.subnets[0].id if (subnet_1_lookup_result_tag.subnets | default([]) | length > 0) else 'not found' }}"
+      - "  subnet_1_id after lookup: {{ subnet_1_id | default('not set') }}"
+      - "  subnet_2_name: {{ subnet_2_name | default('not set') }}"
+      - "  subnet_2_tag: {{ subnet_2_tag | default('not set') }}"
+      - "  subnet_2 name lookup result: {{ subnet_2_lookup_result_name.subnets[0].id if (subnet_2_lookup_result_name.subnets | default([]) | length > 0) else 'not found' }}"
+      - "  subnet_2 tag lookup result: {{ subnet_2_lookup_result_tag.subnets[0].id if (subnet_2_lookup_result_tag.subnets | default([]) | length > 0) else 'not found' }}"
+      - "  subnet_2_id after lookup: {{ subnet_2_id | default('not set') }}"
+  when: lookup_subnet_1 | default(false) or lookup_subnet_2 | default(false)
+
+- name: List available subnets in VPC (for debugging)
+  amazon.aws.ec2_vpc_subnet_info:
+    region: "{{ aws_region }}"
+    filters:
+      vpc-id: "{{ vpc_id }}"
+  register: available_subnets
+  when: vpc_id is defined and vpc_id != '' and vpc_id != 'vpc-xxxxxxxxxxxxxxxxx'
+
+- name: Display available subnets
+  debug:
+    msg:
+      - "Available subnets in VPC {{ vpc_id }}:"
+      - "{{ available_subnets.subnets | default([]) | map(attribute='id') | list }}"
+  when: vpc_id is defined and vpc_id != '' and vpc_id != 'vpc-xxxxxxxxxxxxxxxxx'
+
+- name: Display subnet details
+  debug:
+    var: item
+  loop: "{{ available_subnets.subnets | default([]) }}"
+  loop_control:
+    label: "{{ item.id }} - {{ item.tags.Name | default('no name') }} ({{ item.availability_zone }})"
+  when: vpc_id is defined and vpc_id != '' and vpc_id != 'vpc-xxxxxxxxxxxxxxxxx'
+
+- name: Check if subnet lookup was attempted
+  set_fact:
+    subnet_lookup_attempted: "{{ (lookup_subnet_1 | default(false)) or (lookup_subnet_2 | default(false)) }}"
+    subnet_lookup_vars_provided: "{{ (subnet_1_name != '' or subnet_1_tag != '') or (subnet_2_name != '' or subnet_2_tag != '') }}"
+
+- name: Validate subnet IDs are set (lookup attempted but failed)
+  fail:
+    msg: >
+      Subnet lookup was attempted but subnets not found.
+      
+      Lookup details:
+      - Subnet 1: name={{ subnet_1_name | default('not set') }}, tag={{ subnet_1_tag | default('not set') }}
+      - Subnet 2: name={{ subnet_2_name | default('not set') }}, tag={{ subnet_2_tag | default('not set') }}
+      
+      Available subnets in VPC {{ vpc_id }} (region {{ aws_region }}):
+      {% if available_subnets is defined and available_subnets.subnets is defined %}
+      {% for subnet in available_subnets.subnets %}
+      - Name: {{ subnet.tags.Name | default('(no name)') }}, ID: {{ subnet.id }}, AZ: {{ subnet.availability_zone }}
+      {% endfor %}
+      {% else %}
+      (Unable to retrieve subnet list - check AWS credentials have ec2:DescribeSubnets permission)
+      {% endif %}
+      
+      Please check:
+      - Subnet names match exactly (case-sensitive)
+      - Subnets exist in the specified VPC
+      - AWS credentials have ec2:DescribeSubnets permission
+      - You can also provide subnet IDs directly using subnet_1_id and subnet_2_id
+  when: >
+    subnet_lookup_attempted | default(false) and
+    ((subnet_1_id is not defined or subnet_1_id == '' or subnet_1_id == 'subnet-xxxxxxxxxxxxxxxxx') or
+     (subnet_2_id is not defined or subnet_2_id == '' or subnet_2_id == 'subnet-xxxxxxxxxxxxxxxxx'))
+
+- name: Validate subnet IDs are set (no lookup variables provided)
+  fail:
+    msg: >
+      Subnet IDs must be provided. Either:
+      1. Provide subnet_1_id and subnet_2_id directly, OR
+      2. Provide subnet_1_name/subnet_1_tag and subnet_2_name/subnet_2_tag to look them up
+      Current values:
+      - subnet_1_id: {{ subnet_1_id | default('not set') }}
+      - subnet_2_id: {{ subnet_2_id | default('not set') }}
+      - subnet_1_name: {{ subnet_1_name | default('not set') }}
+      - subnet_1_tag: {{ subnet_1_tag | default('not set') }}
+      - subnet_2_name: {{ subnet_2_name | default('not set') }}
+      - subnet_2_tag: {{ subnet_2_tag | default('not set') }}
+  when: >
+    not (subnet_lookup_vars_provided | default(false)) and
+    ((subnet_1_id is not defined or subnet_1_id == '' or subnet_1_id == 'subnet-xxxxxxxxxxxxxxxxx') or
+     (subnet_2_id is not defined or subnet_2_id == '' or subnet_2_id == 'subnet-xxxxxxxxxxxxxxxxx'))
+
+- name: Check if route table IDs need to be looked up
+  set_fact:
+    lookup_route_tables: "{{ ((route_table_ids | default([]) | length == 0) or (route_table_ids | default(['rtb-xxxxxxxxxxxxxxxxx']) | first == 'rtb-xxxxxxxxxxxxxxxxx')) and (route_table_names | default([]) | length > 0 or route_table_tags | default([]) | length > 0) }}"
+
+- name: Look up route table IDs by names
+  amazon.aws.ec2_vpc_route_table_info:
+    region: "{{ aws_region }}"
+    filters:
+      vpc-id: "{{ vpc_id }}"
+      "tag:Name": "{{ item }}"
+  register: route_table_lookup_results
+  loop: "{{ route_table_names }}"
+  when: (lookup_route_tables | default(false)) and route_table_names | default([]) | length > 0
+
+- name: Look up route table IDs by tags
+  amazon.aws.ec2_vpc_route_table_info:
+    region: "{{ aws_region }}"
+    filters:
+      vpc-id: "{{ vpc_id }}"
+      "tag:{{ item.split(':')[0] }}": "{{ item.split(':')[1] }}"
+  register: route_table_tag_lookup_results
+  loop: "{{ route_table_tags }}"
+  when: (lookup_route_tables | default(false)) and route_table_tags | default([]) | length > 0
+
+- name: Set route table IDs from lookups
+  set_fact:
+    route_table_ids: "{{ (route_table_lookup_results.results | default([]) | map(attribute='route_tables') | map('first') | map(attribute='route_table_id') | select('string') | list) + (route_table_tag_lookup_results.results | default([]) | map(attribute='route_tables') | map('first') | map(attribute='route_table_id') | select('string') | list) }}"
+  when: (lookup_route_tables | default(false)) and ((route_table_lookup_results.results | default([]) | length > 0) or (route_table_tag_lookup_results.results | default([]) | length > 0))
+
+- name: Get main route table for VPC if route tables not provided
+  amazon.aws.ec2_vpc_route_table_info:
+    region: "{{ aws_region }}"
+    filters:
+      vpc-id: "{{ vpc_id }}"
+      association.main: "true"
+  register: main_route_table
+  when: >
+    (route_table_ids | default([]) | length == 0) or
+    (route_table_ids | default(['rtb-xxxxxxxxxxxxxxxxx']) | first == 'rtb-xxxxxxxxxxxxxxxxx')
+
+- name: Set route table IDs to main route table if not provided
+  set_fact:
+    route_table_ids: "{{ [main_route_table.route_tables[0].route_table_id] }}"
+  when: >
+    ((route_table_ids | default([]) | length == 0) or
+     (route_table_ids | default(['rtb-xxxxxxxxxxxxxxxxx']) | first == 'rtb-xxxxxxxxxxxxxxxxx')) and
+    main_route_table.route_tables is defined and
+    main_route_table.route_tables | length > 0
+
+- name: Validate route table IDs are valid
+  fail:
+    msg: >
+      Route table IDs must be valid. Current value: {{ route_table_ids }}.
+      Please provide route_table_ids, route_table_names, or route_table_tags.
+      The route table IDs should match the pattern: rtb-[0-9a-f]{8,}
+  when: >
+    (route_table_ids | default([]) | length == 0) or
+    (route_table_ids | default(['rtb-xxxxxxxxxxxxxxxxx']) | first == 'rtb-xxxxxxxxxxxxxxxxx') or
+    (route_table_ids | first | regex_search('^rtb-[0-9a-f]{8,}$') == None)
+
+- name: Display resolved network configuration
+  debug:
+    msg:
+      - "Resolved Network Configuration:"
+      - "  VPC ID: {{ vpc_id }}"
+      - "  Subnet 1 ID: {{ subnet_1_id }}"
+      - "  Subnet 2 ID: {{ subnet_2_id }}"
+      - "  Route Table IDs: {{ route_table_ids }}"
+
+- name: Check if security group already exists
+  amazon.aws.ec2_security_group_info:
+    region: "{{ aws_region }}"
+    filters:
+      vpc-id: "{{ vpc_id }}"
+      group-name: "{{ file_system_name }}-sg"
+  register: existing_sg_check
+  changed_when: false
+
+- name: Create security group for FSx ONTAP
+  amazon.aws.ec2_security_group:
+    name: "{{ file_system_name }}-sg"
+    description: "Security Group for FSx for NetApp ONTAP File Storage Access"
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ aws_region }}"
+    rules:
+      # ICMP
+      - proto: icmp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: -1
+        to_port: -1
+      # SSH
+      - proto: tcp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 22
+        to_port: 22
+      # NFS/RPC
+      - proto: tcp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 111
+        to_port: 111
+      - proto: udp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 111
+        to_port: 111
+      # SMB/CIFS
+      - proto: tcp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 135
+        to_port: 135
+      - proto: udp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 135
+        to_port: 135
+      - proto: tcp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 139
+        to_port: 139
+      - proto: udp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 137
+        to_port: 137
+      - proto: udp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 139
+        to_port: 139
+      - proto: tcp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 445
+        to_port: 445
+      # SNMP
+      - proto: tcp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 161
+        to_port: 161
+      - proto: udp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 161
+        to_port: 161
+      - proto: tcp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 162
+        to_port: 162
+      - proto: udp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 162
+        to_port: 162
+      # HTTPS
+      - proto: tcp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 443
+        to_port: 443
+      # NFS
+      - proto: tcp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 2049
+        to_port: 2049
+      - proto: udp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 2049
+        to_port: 2049
+      # iSCSI
+      - proto: udp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 3260
+        to_port: 3260
+      # ONTAP Management
+      - proto: tcp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 4045
+        to_port: 4045
+      - proto: udp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 4045
+        to_port: 4045
+      - proto: tcp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 4046
+        to_port: 4046
+      - proto: udp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 4046
+        to_port: 4046
+      - proto: udp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 4049
+        to_port: 4049
+      # Additional ONTAP ports
+      - proto: tcp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 635
+        to_port: 635
+      - proto: udp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 635
+        to_port: 635
+      - proto: tcp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 749
+        to_port: 749
+      - proto: tcp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 11104
+        to_port: 11104
+      - proto: tcp
+        cidr_ip: "{{ allowed_cidr }}"
+        from_port: 11105
+        to_port: 11105
+    tags: "{{ tags }}"
+  register: security_group
+  when: existing_sg_check.security_groups | default([]) | length == 0
+
+- name: Get security group ID from existing or created
+  set_fact:
+    security_group_id: "{{ existing_sg_check.security_groups[0].group_id if (existing_sg_check.security_groups | default([]) | length > 0) else security_group.group_id }}"
+
+- name: Check if FSx file system already exists
+  command: >
+    aws fsx describe-file-systems
+    --region {{ aws_region }}
+    --filters "Name=file-system-type,Values=ONTAP"
+    --output json
+  register: existing_fsx_check
+  changed_when: false
+  failed_when: false
+
+- name: Parse FSx file systems JSON
+  set_fact:
+    fsx_file_systems: "{{ (existing_fsx_check.stdout | from_json).FileSystems | default([]) }}"
+  when: >
+    existing_fsx_check.rc == 0 and
+    existing_fsx_check.stdout is defined and
+    existing_fsx_check.stdout | trim != '' and
+    existing_fsx_check.stdout | trim | length > 0
+
+- name: Set empty file systems list if no output or error
+  set_fact:
+    fsx_file_systems: []
+  when: >
+    existing_fsx_check.rc != 0 or
+    existing_fsx_check.stdout is not defined or
+    existing_fsx_check.stdout | trim == '' or
+    existing_fsx_check.stdout | trim | length == 0
+
+- name: Find FSx file system by name tag
+  set_fact:
+    existing_fsx_id: "{{ item.FileSystemId }}"
+  loop: "{{ fsx_file_systems | default([]) }}"
+  when: >
+    (existing_fsx_id is not defined or existing_fsx_id == '') and
+    item.Tags is defined and
+    item.Tags | selectattr('Key', 'equalto', 'Name') | selectattr('Value', 'equalto', file_system_name) | list | length > 0
+  loop_control:
+    label: "{{ item.FileSystemId }}"
+
+- name: Set existing FSx file system ID (default empty if not found)
+  set_fact:
+    existing_fsx_id: ""
+  when: existing_fsx_id is not defined
+
+- name: Debug FSx existence check
+  debug:
+    msg:
+      - "FSx Existence Check:"
+      - "  File System Name: {{ file_system_name }}"
+      - "  Existing FSx ID: {{ existing_fsx_id | default('NOT FOUND') }}"
+      - "  Will create new filesystem: {{ (existing_fsx_id | default('')) == '' }}"
+      - "  Will skip creation: {{ (existing_fsx_id | default('')) != '' }}"
+
+- name: Create FSx for ONTAP file system
+  shell: |
+    aws fsx create-file-system \
+    --region {{ aws_region }} \
+    --file-system-type ONTAP \
+    --storage-capacity {{ storage_capacity }} \
+    --storage-type {{ storage_type }} \
+    --subnet-ids {{ subnet_1_id }} {{ subnet_2_id }} \
+    --security-group-ids {{ security_group_id }} \
+    --ontap-configuration '{
+      "DeploymentType": "{{ deployment_type }}",
+      "PreferredSubnetId": "{{ subnet_1_id }}",
+      "RouteTableIds": {{ route_table_ids | to_json }},
+      "ThroughputCapacity": {{ throughput_capacity }},
+      "WeeklyMaintenanceStartTime": "{{ weekly_maintenance_time }}",
+      "FsxAdminPassword": "{{ fsx_admin_password }}",
+      "AutomaticBackupRetentionDays": 3,
+      "DailyAutomaticBackupStartTime": "01:00",
+      "DiskIopsConfiguration": {"Mode": "AUTOMATIC"}
+    }' \
+    --tags \
+      Key=Name,Value={{ file_system_name }} \
+      Key=Environment,Value={{ tags.Environment }} \
+      Key=ManagedBy,Value={{ tags.ManagedBy }} \
+    --output json
+  register: fsx_create_result
+  when: existing_fsx_id | default('') == ''
+  environment:
+    AWS_DEFAULT_REGION: "{{ aws_region }}"
+
+- name: Get existing FSx file system ID
+  set_fact:
+    fsx_filesystem_id: "{{ existing_fsx_id }}"
+  when: existing_fsx_id | default('') != ''
+
+- name: Extract FSx file system ID from creation result
+  set_fact:
+    fsx_filesystem_id: "{{ (fsx_create_result.stdout | from_json).FileSystem.FileSystemId }}"
+  when: (existing_fsx_id | default('') == '') and fsx_create_result is defined
+
+- name: Wait for FSx file system to be available
+  command: >
+    aws fsx describe-file-systems
+    --region {{ aws_region }}
+    --file-system-ids {{ fsx_filesystem_id }}
+    --query "FileSystems[0].Lifecycle"
+    --output text
+  register: fsx_status
+  until: fsx_status.stdout == "AVAILABLE"
+  retries: 60
+  delay: 30
+  when: (existing_fsx_id | default('') == '') and fsx_create_result is defined
+
+- name: Get FSx file system details
+  command: >
+    aws fsx describe-file-systems
+    --region {{ aws_region }}
+    --file-system-ids {{ fsx_filesystem_id }}
+    --output json
+  register: fsx_details
+  changed_when: false
+
+- name: Set FSx file system facts
+  set_fact:
+    fsx_filesystem_data: "{{ (fsx_details.stdout | from_json).FileSystems[0] }}"
+
+- name: Extract FSx DNS name
+  set_fact:
+    fsx_dns_name: "{{ fsx_filesystem_data.DNSName | default(fsx_filesystem_data.OntapConfiguration.Endpoints.Management.DNSName | default('N/A')) }}"
+  when: fsx_filesystem_data is defined
+
+- name: Display FSx File System ID
+  debug:
+    msg: "FSx File System ID: {{ fsx_filesystem_id }}"
+
+- name: Check if SVM already exists
+  command: >
+    aws fsx describe-storage-virtual-machines
+    --region {{ aws_region }}
+    --file-system-id {{ fsx_filesystem_id }}
+    --query "StorageVirtualMachines[?Name=='{{ svm_name }}'].StorageVirtualMachineId"
+    --output text
+  register: existing_svm_check
+  changed_when: false
+  failed_when: false
+
+- name: Set existing SVM ID
+  set_fact:
+    existing_svm_id: "{{ existing_svm_check.stdout.strip() if existing_svm_check.stdout is defined and existing_svm_check.stdout.strip() != '' else '' }}"
+
+- name: Create Storage Virtual Machine (SVM)
+  command: >
+    aws fsx create-storage-virtual-machine
+    --region {{ aws_region }}
+    --file-system-id {{ fsx_filesystem_id }}
+    --name {{ svm_name }}
+    --root-volume-security-style {{ root_volume_security_style }}
+    --svm-admin-password {{ svm_admin_password }}
+    --output json
+  register: svm_create_result
+  when: existing_svm_id == ""
+  environment:
+    AWS_DEFAULT_REGION: "{{ aws_region }}"
+
+- name: Get existing SVM ID
+  set_fact:
+    svm_id: "{{ existing_svm_id }}"
+  when: existing_svm_id != ""
+
+- name: Extract SVM ID from creation result
+  set_fact:
+    svm_id: "{{ (svm_create_result.stdout | from_json).StorageVirtualMachine.StorageVirtualMachineId }}"
+  when: existing_svm_id == "" and svm_create_result is defined
+
+- name: Wait for SVM to be created
+  command: >
+    aws fsx describe-storage-virtual-machines
+    --region {{ aws_region }}
+    --storage-virtual-machine-ids {{ svm_id }}
+    --query "StorageVirtualMachines[0].Lifecycle"
+    --output text
+  register: svm_status
+  until: svm_status.stdout == "CREATED"
+  retries: 20
+  delay: 30
+  when: existing_svm_id == "" and svm_create_result is defined
+
+- name: Get SVM details
+  command: >
+    aws fsx describe-storage-virtual-machines
+    --region {{ aws_region }}
+    --storage-virtual-machine-ids {{ svm_id }}
+    --output json
+  register: svm_details
+  changed_when: false
+
+- name: Set SVM facts
+  set_fact:
+    svm_uuid: "{{ (svm_details.stdout | from_json).StorageVirtualMachines[0].UUID }}"
+    svm_name_result: "{{ (svm_details.stdout | from_json).StorageVirtualMachines[0].Name }}"
+
+- name: Display SVM Information
+  debug:
+    msg:
+      - "SVM ID: {{ svm_id }}"
+      - "SVM Name: {{ svm_name_result }}"
+      - "SVM UUID: {{ svm_uuid }}"
+
+- name: Check if FSx Admin secret exists
+  command: >
+    aws secretsmanager describe-secret
+    --region {{ aws_region }}
+    --secret-id {{ file_system_name }}-FsxAdminPassword
+    --query "ARN"
+    --output text
+  register: fsx_secret_check
+  changed_when: false
+  failed_when: false
+
+- name: Create Secrets Manager secret for FSx Admin Password
+  community.aws.secretsmanager_secret:
+    region: "{{ aws_region }}"
+    name: "{{ file_system_name }}-FsxAdminPassword"
+    description: "FSx Admin Password for {{ file_system_name }}"
+    secret: "{\"username\":\"fsxadmin\",\"password\":\"{{ fsx_admin_password }}\"}"
+    secret_type: string
+    tags:
+      Name: "{{ file_system_name }}"
+      Environment: "{{ tags.Environment }}"
+      ManagedBy: "{{ tags.ManagedBy }}"
+  register: fsx_secret
+  when: >
+    create_secrets | default(true) and
+    (fsx_secret_check.stdout == "" or fsx_secret_check.stdout == "None")
+  failed_when: false
+
+- name: Warn if FSx secret creation failed
+  debug:
+    msg:
+      - "WARNING: Failed to create FSx Admin secret in AWS Secrets Manager."
+      - "Error: {{ fsx_secret.msg | default('Unknown error') }}"
+      - "This is non-fatal - the FSx filesystem was created successfully."
+      - "You can manually create the secret or set create_secrets: false to skip this step."
+  when: >
+    create_secrets | default(true) and
+    (fsx_secret_check.stdout == "" or fsx_secret_check.stdout == "None") and
+    fsx_secret is defined and
+    fsx_secret.failed | default(false)
+
+- name: Check if SVM Admin secret exists
+  command: >
+    aws secretsmanager describe-secret
+    --region {{ aws_region }}
+    --secret-id {{ file_system_name }}-SVMAdminPassword
+    --query "ARN"
+    --output text
+  register: svm_secret_check
+  changed_when: false
+  failed_when: false
+
+- name: Create Secrets Manager secret for SVM Admin Password
+  community.aws.secretsmanager_secret:
+    region: "{{ aws_region }}"
+    name: "{{ file_system_name }}-SVMAdminPassword"
+    description: "SVM Admin Password for {{ file_system_name }}"
+    secret: "{\"username\":\"vsadmin\",\"password\":\"{{ svm_admin_password }}\"}"
+    secret_type: string
+    tags:
+      Name: "{{ file_system_name }}"
+      Environment: "{{ tags.Environment }}"
+      ManagedBy: "{{ tags.ManagedBy }}"
+  register: svm_secret
+  when: >
+    create_secrets | default(true) and
+    (svm_secret_check.stdout == "" or svm_secret_check.stdout == "None")
+  failed_when: false
+
+- name: Warn if SVM secret creation failed
+  debug:
+    msg:
+      - "WARNING: Failed to create SVM Admin secret in AWS Secrets Manager."
+      - "Error: {{ svm_secret.msg | default('Unknown error') }}"
+      - "This is non-fatal - the FSx filesystem was created successfully."
+      - "You can manually create the secret or set create_secrets: false to skip this step."
+  when: >
+    create_secrets | default(true) and
+    (svm_secret_check.stdout == "" or svm_secret_check.stdout == "None") and
+    svm_secret is defined and
+    svm_secret.failed | default(false)
+
+- name: Get or set FSx Admin secret ARN
+  set_fact:
+    fsx_secret_arn: "{{ fsx_secret_check.stdout if (fsx_secret_check.stdout != '' and fsx_secret_check.stdout != 'None') else (fsx_secret.secret.arn | default('') if (fsx_secret is defined and fsx_secret.secret is defined) else '') }}"
+
+- name: Get or set SVM Admin secret ARN
+  set_fact:
+    svm_secret_arn: "{{ svm_secret_check.stdout if (svm_secret_check.stdout != '' and svm_secret_check.stdout != 'None') else (svm_secret.secret.arn | default('') if (svm_secret is defined and svm_secret.secret is defined) else '') }}"
+
+- name: Display Output Summary
+  debug:
+    msg:
+      - "=========================================="
+      - "FSx for ONTAP Deployment Complete"
+      - "=========================================="
+      - "File System ID: {{ fsx_filesystem_id }}"
+      - "File System DNS Name: {{ fsx_dns_name }}"
+      - "SVM ID: {{ svm_id }}"
+      - "SVM Name: {{ svm_name_result }}"
+      - "Security Group ID: {{ security_group_id }}"
+      - "FSx Admin Secret ARN: {{ fsx_secret_arn }}"
+      - "SVM Admin Secret ARN: {{ svm_secret_arn }}"
+      - "=========================================="
+

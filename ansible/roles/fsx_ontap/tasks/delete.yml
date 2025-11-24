@@ -1,0 +1,276 @@
+---
+- name: Check if deletion is requested
+  set_fact:
+    should_delete: "{{ delete_resources | default(false) }}"
+
+- block:
+    - name: Lookup FSx file system by name
+      command: >
+        aws fsx describe-file-systems
+        --region {{ aws_region }}
+        --output json
+      register: fsx_lookup_delete
+      changed_when: false
+      failed_when: false
+
+    - name: Debug FSx lookup result
+      debug:
+        msg:
+          - "FSx lookup return code: {{ fsx_lookup_delete.rc }}"
+          - "FSx lookup stdout length: {{ fsx_lookup_delete.stdout | default('') | length }}"
+          - "FSx lookup stderr: {{ fsx_lookup_delete.stderr | default('(no error)') }}"
+          - "FSx lookup stdout (first 500 chars): {{ (fsx_lookup_delete.stdout | default(''))[:500] }}"
+          - "File system name to find: {{ file_system_name }}"
+          - "AWS Region: {{ aws_region }}"
+
+    - name: Warn if FSx lookup failed
+      debug:
+        msg:
+          - "WARNING: FSx lookup command failed with return code {{ fsx_lookup_delete.rc }}"
+          - "Error: {{ fsx_lookup_delete.stderr | default('Unknown error') }}"
+          - "This might mean:"
+          - "  - The filesystem was already deleted"
+          - "  - AWS credentials don't have fsx:DescribeFileSystems permission"
+          - "  - The region {{ aws_region }} is incorrect"
+          - "  - There are no ONTAP filesystems in this region"
+      when: fsx_lookup_delete.rc != 0
+
+
+    - name: Parse FSx file systems JSON for deletion
+      set_fact:
+        fsx_systems_for_delete: "{{ (fsx_lookup_delete.stdout | from_json).FileSystems | default([]) | selectattr('FileSystemType', 'equalto', 'ONTAP') | list }}"
+      when: fsx_lookup_delete.rc == 0 and fsx_lookup_delete.stdout | default('') | length > 0
+      failed_when: false
+
+    - name: Debug parsed FSx systems
+      debug:
+        msg:
+          - "Found {{ fsx_systems_for_delete | default([]) | length }} FSx filesystems"
+          - "Filesystems: {{ fsx_systems_for_delete | default([]) | map(attribute='FileSystemId') | list }}"
+          - "Looking for filesystem with Name tag: {{ file_system_name }}"
+      when: fsx_systems_for_delete is defined
+
+    - name: Set empty file systems list if no output or error for deletion
+      set_fact:
+        fsx_systems_for_delete: []
+      when: fsx_systems_for_delete is not defined
+
+    - name: Debug filesystem tags for matching
+      debug:
+        msg:
+          - "Filesystem ID: {{ item.FileSystemId }}"
+          - "Tags: {{ item.Tags | default([]) }}"
+          - "Name tag value: {{ item.Tags | default([]) | selectattr('Key', 'equalto', 'Name') | map(attribute='Value') | list | first | default('(no Name tag)') }}"
+          - "Looking for: {{ file_system_name }}"
+          - "Match: {{ 'YES' if (item.Tags | default([]) | selectattr('Key', 'equalto', 'Name') | selectattr('Value', 'equalto', file_system_name) | list | length > 0) else 'NO' }}"
+      loop: "{{ fsx_systems_for_delete | default([]) }}"
+      when: fsx_systems_for_delete is defined
+
+    - name: Find FSx file system ID for deletion
+      set_fact:
+        fsx_to_delete_id: "{{ item.FileSystemId }}"
+      loop: "{{ fsx_systems_for_delete }}"
+      when: >
+        (fsx_to_delete_id is not defined or fsx_to_delete_id == '') and
+        item.Tags is defined and
+        item.Tags | selectattr('Key', 'equalto', 'Name') | selectattr('Value', 'equalto', file_system_name) | list | length > 0
+      loop_control:
+        label: "{{ item.FileSystemId }}"
+
+    - name: Set empty if FSx not found for deletion
+      set_fact:
+        fsx_to_delete_id: ""
+      when: fsx_to_delete_id is not defined
+
+    - name: Debug FSx deletion lookup
+      debug:
+        msg: "FSx to delete ID: {{ fsx_to_delete_id }}"
+
+    - name: Lookup all SVMs for deletion
+      command: >
+        aws fsx describe-storage-virtual-machines
+        --region {{ aws_region }}
+        --output json
+      register: svm_lookup_delete
+      changed_when: false
+      failed_when: false
+      when: fsx_to_delete_id != ""
+
+    - name: Debug SVM lookup result
+      debug:
+        msg:
+          - "SVM lookup return code: {{ svm_lookup_delete.rc }}"
+          - "SVM lookup stderr: {{ svm_lookup_delete.stderr | default('(no error)') }}"
+          - "Looking for SVM name: {{ svm_name }}"
+          - "FSx ID to match: {{ fsx_to_delete_id }}"
+      when: fsx_to_delete_id != "" and svm_lookup_delete is defined
+
+    - name: Parse SVM JSON for deletion
+      set_fact:
+        all_svms: "{{ (svm_lookup_delete.stdout | from_json).StorageVirtualMachines | default([]) }}"
+      when: >
+        fsx_to_delete_id != "" and
+        svm_lookup_delete.rc == 0 and
+        svm_lookup_delete.stdout is defined and
+        svm_lookup_delete.stdout | default('') | length > 0
+      failed_when: false
+
+    - name: Filter SVMs by filesystem ID
+      set_fact:
+        svms_for_delete: "{{ all_svms | default([]) | selectattr('FileSystemId', 'equalto', fsx_to_delete_id) | list }}"
+      when: >
+        fsx_to_delete_id != "" and
+        all_svms is defined
+
+    - name: Set empty SVM list if not found
+      set_fact:
+        svms_for_delete: []
+      when: >
+        fsx_to_delete_id != "" and
+        (svms_for_delete is not defined or svms_for_delete | length == 0)
+
+    - name: Debug found SVMs
+      debug:
+        msg:
+          - "Found {{ svms_for_delete | default([]) | length }} SVMs"
+          - "SVM details: {{ svms_for_delete | default([]) | map(attribute='Name') | list }}"
+      when: fsx_to_delete_id != "" and svms_for_delete is defined
+
+    - name: Find SVM ID for deletion by name
+      set_fact:
+        svm_to_delete_id: "{{ item.StorageVirtualMachineId }}"
+      loop: "{{ svms_for_delete | default([]) }}"
+      when: >
+        fsx_to_delete_id != "" and
+        (svm_to_delete_id is not defined or svm_to_delete_id == '') and
+        item.Name == svm_name
+      loop_control:
+        label: "{{ item.Name }} ({{ item.StorageVirtualMachineId }})"
+
+    - name: Set empty SVM ID if not found
+      set_fact:
+        svm_to_delete_id: ""
+      when: svm_to_delete_id is not defined
+
+    - name: Debug SVM deletion lookup
+      debug:
+        msg: "SVM to delete ID: {{ svm_to_delete_id | default('(not found)') }}"
+
+    - name: Delete Storage Virtual Machine (SVM) - MUST BE DONE BEFORE FILESYSTEM
+      command: >
+        aws fsx delete-storage-virtual-machine
+        --region {{ aws_region }}
+        --storage-virtual-machine-id {{ svm_to_delete_id }}
+        --output json
+      register: svm_delete_result
+      when: svm_to_delete_id != "" and svm_to_delete_id is defined
+      failed_when: false
+
+    - name: Wait for SVM to be deleted
+      command: >
+        aws fsx describe-storage-virtual-machines
+        --region {{ aws_region }}
+        --storage-virtual-machine-ids {{ svm_to_delete_id }}
+        --query "StorageVirtualMachines[0].Lifecycle"
+        --output text
+      register: svm_delete_status
+      until: svm_delete_status.rc != 0 or svm_delete_status.stdout == "DELETED" or "does not exist" in svm_delete_status.stderr | default('')
+      retries: 20
+      delay: 30
+      failed_when: false
+      when: >
+        svm_to_delete_id != "" and
+        svm_to_delete_id is defined and
+        svm_delete_result is defined and
+        svm_delete_result.rc == 0
+
+    - name: Check if SVM deletion is required
+      set_fact:
+        svm_deletion_required: "{{ svm_to_delete_id != '' and svm_to_delete_id is defined }}"
+        svm_deletion_complete: "{{ (svm_to_delete_id == '' or svm_to_delete_id is not defined) or (svm_delete_status is defined and (svm_delete_status.rc != 0 or svm_delete_status.stdout == 'DELETED')) }}"
+
+    - name: Fail if SVM exists and wasn't deleted
+      fail:
+        msg: >
+          Cannot delete FSx filesystem {{ fsx_to_delete_id }} because SVM {{ svm_to_delete_id }} still exists.
+          The SVM must be deleted first. Please delete the SVM manually or check why the SVM deletion failed.
+      when: >
+        fsx_to_delete_id != "" and
+        svm_deletion_required | default(false) and
+        not (svm_deletion_complete | default(false))
+
+    - name: Delete FSx file system (only after SVM is deleted or if no SVM exists)
+      command: >
+        aws fsx delete-file-system
+        --region {{ aws_region }}
+        --file-system-id {{ fsx_to_delete_id }}
+        --output json
+      register: fsx_delete_result
+      when: >
+        fsx_to_delete_id != "" and
+        (svm_to_delete_id == "" or svm_to_delete_id is not defined or svm_deletion_complete | default(false))
+      failed_when: false
+
+    - name: Debug FSx deletion result
+      debug:
+        msg:
+          - "FSx deletion return code: {{ fsx_delete_result.rc | default('(not defined)') }}"
+          - "FSx deletion stdout: {{ fsx_delete_result.stdout | default('(empty)') }}"
+          - "FSx deletion stderr: {{ fsx_delete_result.stderr | default('(no error)') }}"
+      when: fsx_delete_result is defined
+
+    - name: Wait for FSx file system to be deleted
+      command: >
+        aws fsx describe-file-systems
+        --region {{ aws_region }}
+        --file-system-ids {{ fsx_to_delete_id }}
+        --query "FileSystems[0].Lifecycle"
+        --output text
+      register: fsx_delete_status
+      until: >
+        fsx_delete_status.rc != 0 or
+        fsx_delete_status.stdout == "DELETED" or
+        "does not exist" in (fsx_delete_status.stderr | default('')) or
+        "not found" in (fsx_delete_status.stderr | default(''))
+      retries: 60
+      delay: 30
+      failed_when: false
+      when: >
+        fsx_to_delete_id != "" and
+        fsx_delete_result is defined
+
+    - name: Delete Secrets Manager secrets
+      community.aws.secretsmanager_secret:
+        region: "{{ aws_region }}"
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ file_system_name }}-FsxAdminPassword"
+        - "{{ file_system_name }}-SVMAdminPassword"
+      when: create_secrets | default(true)
+      failed_when: false
+
+    - name: Delete security group
+      amazon.aws.ec2_security_group:
+        region: "{{ aws_region }}"
+        name: "{{ file_system_name }}-sg"
+        state: absent
+      failed_when: false
+
+    - name: Display deletion summary
+      debug:
+        msg:
+          - "=========================================="
+          - "FSx ONTAP Resources Deletion Summary"
+          - "=========================================="
+          - "FSx File System: {{ 'Deleted' if (fsx_to_delete_id | default('') != '' and fsx_delete_result is defined) else 'Not found or not deleted' }}"
+          - "SVM: {{ 'Deleted' if (svm_to_delete_id | default('') != '' and svm_delete_result is defined) else 'Not found or not deleted' }}"
+          - "Secrets: {{ 'Deleted' if create_secrets | default(true) else 'Skipped' }}"
+          - "Security Group: Deleted"
+          - "=========================================="
+  when: should_delete | default(false)
+  rescue:
+    - name: Display deletion error
+      debug:
+        msg: "An error occurred during resource deletion. Some resources may not have been deleted."
+
