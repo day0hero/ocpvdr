@@ -5,7 +5,7 @@ metadata:
   name: ontap-iscsi
   namespace: trident
   annotations:
-    argocd.argoproj.io/sync-wave: "2"
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   backendName: ontap-iscsi
   credentials:
