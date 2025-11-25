@@ -1,4 +1,4 @@
 tridentFSX:
   iscsi:
-    mgmtLIF: "" # Example LIF address: management.fs-1877692518d2cc2b8.fsx.us-west-1.amazonaws.com
+    mgmtLIF: management.fs-02be01ef322bcfc62.fsx.us-west-1.amazonaws.com
     svm: SVM1
