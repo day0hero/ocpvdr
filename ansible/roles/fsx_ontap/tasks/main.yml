@@ -661,6 +661,7 @@
   set_fact:
     svm_uuid: "{{ (svm_details.stdout | from_json).StorageVirtualMachines[0].UUID }}"
     svm_name_result: "{{ (svm_details.stdout | from_json).StorageVirtualMachines[0].Name }}"
+    svm_mgmt_dns_name: "{{ (svm_details.stdout | from_json).StorageVirtualMachines[0].Endpoints.Management.DNSName | default('') }}"
 
 - name: Display SVM Information
   debug:
