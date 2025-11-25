@@ -136,11 +136,11 @@
       ansible.builtin.replace:
         path: "{{ playbook_dir }}/../values-trident.yaml"
         regexp: '^(\s{4})mgmtLIF:\s+.*'
-        replace: '\1mgmtLIF: {{ fsx_dns_name }}'
+        replace: '\1mgmtLIF: {{ svm_mgmt_dns_name }}'
       when: 
         - not (delete_resources | default(false))
-        - fsx_dns_name is defined
-        - fsx_dns_name != ""
+        - svm_mgmt_dns_name is defined
+        - svm_mgmt_dns_name != ""
 
     - name: Update tridentFSX.iscsi.svm in values-trident.yaml
       ansible.builtin.replace:
@@ -156,7 +156,7 @@
       debug:
         msg:
           - "Updated values-trident.yaml:"
-          - "  mgmtLIF: {{ fsx_dns_name | default('not set') }}"
+          - "  mgmtLIF: {{ svm_mgmt_dns_name | default('not set') }}"
           - "  svm: {{ svm_name_result | default('not set') }}"
       when: not (delete_resources | default(false))
 
