@@ -2,4 +2,10 @@
 # This Makefile includes the common pattern targets from Makefile-common
 # You can add custom targets above or below the include line
 
+.PHONY: build-fsx
+REGION ?=
+CLUSTER ?=
+build-fsx:
+	ansible-playbook ansible/site.yaml -e aws_region=$(REGION) -e cluster_name=$(CLUSTER) -e @ansible/fsx-ontap-vars.yml
+
 include Makefile-common

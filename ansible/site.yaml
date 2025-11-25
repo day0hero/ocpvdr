@@ -9,13 +9,39 @@
       meta: end_play
       when: delete_resources | default(false)
 
-    - name: Set vpc_name from cluster_name if cluster_name is provided
+    - name: Set vpc_name fact from cluster_name
       set_fact:
         vpc_name: "{{ cluster_name }}-vpc"
-      when:
-        - cluster_name is defined
-        - cluster_name != ""
-        - vpc_name is not defined or vpc_name == ""
+      when: cluster_name is defined
+
+    - name: Set subnet names from cluster_name
+      set_fact:
+        subnet_1_name: "{{ cluster_name }}-private-{{ aws_region }}b"
+        subnet_2_name: "{{ cluster_name }}-private-{{ aws_region }}c"
+      when: cluster_name is defined
+
+    - name: Debug network configuration before role execution
+      debug:
+        msg:
+          - "Network Configuration:"
+          - "  cluster_name: {{ cluster_name | default('not set') }}"
+          - "  aws_region: {{ aws_region | default('not set') }}"
+          - "  vpc_name: {{ vpc_name | default('not set') }}"
+          - "  subnet_1_name: {{ subnet_1_name | default('not set') }}"
+          - "  subnet_2_name: {{ subnet_2_name | default('not set') }}"
+
+    - name: Test VPC lookup directly
+      amazon.aws.ec2_vpc_net_info:
+        region: "{{ aws_region }}"
+        filters:
+          "tag:Name": "{{ vpc_name }}"
+      register: test_vpc_lookup
+      when: vpc_name is defined and vpc_name != ""
+
+    - name: Display VPC lookup test result
+      debug:
+        var: test_vpc_lookup
+      when: test_vpc_lookup is defined
 
     - name: Load values-global.yaml to get pattern name
       set_fact:

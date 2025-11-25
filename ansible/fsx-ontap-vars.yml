@@ -14,11 +14,12 @@
 aws_region: "us-west-1"
 
 # Option 2: Look up by name or tag (uncomment and use these instead)
-vpc_name: "vpcname-vpc"  # VPC name to look up
+# These will be auto-derived from cluster_name if not set
+# vpc_name: ""  # VPC name to look up - will be auto-set to "{cluster_name}-vpc" if cluster_name is provided
 # vpc_tag: "Name:my-vpc"  # Alternative: VPC tag key:value to look up (e.g., "Environment:prod")
-subnet_1_name: "vpcname-private-us-west-1b"  # First subnet name to look up (must be in different AZ than subnet_2)
+# subnet_1_name: ""  # First subnet name to look up - will be auto-set to "{cluster_name}-private-{region}b" if cluster_name is provided
 # subnet_1_tag: "Name:ontap-private-us-west-1b"  # Alternative: First subnet tag key:value
-subnet_2_name: "vpcname-private-us-west-1c"  # Second subnet name to look up (must be in different AZ than subnet_1)
+# subnet_2_name: ""  # Second subnet name to look up - will be auto-set to "{cluster_name}-private-{region}c" if cluster_name is provided
 # subnet_2_tag: "Name:ontap-private-us-west-1c"  # Alternative: Second subnet tag key:value
 route_table_names:
   - "main-route-table"  # List of route table names to look up
