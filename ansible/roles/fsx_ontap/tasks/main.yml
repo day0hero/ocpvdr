@@ -469,7 +469,7 @@
     security_group_id: "{{ existing_sg_check.security_groups[0].group_id if (existing_sg_check.security_groups | default([]) | length > 0) else security_group.group_id }}"
 
 - name: Check if FSx file system already exists
-  command: >
+  ansible.builtin.command: >
     aws fsx describe-file-systems
     --region {{ aws_region }}
     --filters "Name=file-system-type,Values=ONTAP"
@@ -522,7 +522,7 @@
       - "  Will skip creation: {{ (existing_fsx_id | default('')) != '' }}"
 
 - name: Create FSx for ONTAP file system
-  shell: |
+  ansible.builtin.shell: |
     aws fsx create-file-system \
     --region {{ aws_region }} \
     --file-system-type ONTAP \
@@ -562,7 +562,7 @@
   when: (existing_fsx_id | default('') == '') and fsx_create_result is defined
 
 - name: Wait for FSx file system to be available
-  command: >
+  ansible.builtin.command: >
     aws fsx describe-file-systems
     --region {{ aws_region }}
     --file-system-ids {{ fsx_filesystem_id }}
@@ -575,7 +575,7 @@
   when: (existing_fsx_id | default('') == '') and fsx_create_result is defined
 
 - name: Get FSx file system details
-  command: >
+  ansible.builtin.command: >
     aws fsx describe-file-systems
     --region {{ aws_region }}
     --file-system-ids {{ fsx_filesystem_id }}
@@ -597,7 +597,7 @@
     msg: "FSx File System ID: {{ fsx_filesystem_id }}"
 
 - name: Check if SVM already exists
-  command: >
+  ansible.builtin.command: >
     aws fsx describe-storage-virtual-machines
     --region {{ aws_region }}
     --file-system-id {{ fsx_filesystem_id }}
@@ -612,7 +612,7 @@
     existing_svm_id: "{{ existing_svm_check.stdout.strip() if existing_svm_check.stdout is defined and existing_svm_check.stdout.strip() != '' else '' }}"
 
 - name: Create Storage Virtual Machine (SVM)
-  command: >
+  ansible.builtin.command: >
     aws fsx create-storage-virtual-machine
     --region {{ aws_region }}
     --file-system-id {{ fsx_filesystem_id }}
@@ -636,7 +636,7 @@
   when: existing_svm_id == "" and svm_create_result is defined
 
 - name: Wait for SVM to be created
-  command: >
+  ansible.builtin.command: >
     aws fsx describe-storage-virtual-machines
     --region {{ aws_region }}
     --storage-virtual-machine-ids {{ svm_id }}
@@ -649,7 +649,7 @@
   when: existing_svm_id == "" and svm_create_result is defined
 
 - name: Get SVM details
-  command: >
+  ansible.builtin.command: >
     aws fsx describe-storage-virtual-machines
     --region {{ aws_region }}
     --storage-virtual-machine-ids {{ svm_id }}
@@ -670,7 +670,7 @@
       - "SVM UUID: {{ svm_uuid }}"
 
 - name: Check if FSx Admin secret exists
-  command: >
+  ansible.builtin.command: >
     aws secretsmanager describe-secret
     --region {{ aws_region }}
     --secret-id {{ file_system_name }}-FsxAdminPassword
@@ -711,7 +711,7 @@
     fsx_secret.failed | default(false)
 
 - name: Check if SVM Admin secret exists
-  command: >
+  ansible.builtin.command: >
     aws secretsmanager describe-secret
     --region {{ aws_region }}
     --secret-id {{ file_system_name }}-SVMAdminPassword

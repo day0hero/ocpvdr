@@ -5,7 +5,7 @@
 
 - block:
     - name: Lookup FSx file system by name
-      command: >
+      ansible.builtin.command: >
         aws fsx describe-file-systems
         --region {{ aws_region }}
         --output json
@@ -87,7 +87,7 @@
         msg: "FSx to delete ID: {{ fsx_to_delete_id }}"
 
     - name: Lookup all SVMs for deletion
-      command: >
+      ansible.builtin.command: >
         aws fsx describe-storage-virtual-machines
         --region {{ aws_region }}
         --output json
@@ -157,7 +157,7 @@
         msg: "SVM to delete ID: {{ svm_to_delete_id | default('(not found)') }}"
 
     - name: Delete Storage Virtual Machine (SVM) - MUST BE DONE BEFORE FILESYSTEM
-      command: >
+      ansible.builtin.command: >
         aws fsx delete-storage-virtual-machine
         --region {{ aws_region }}
         --storage-virtual-machine-id {{ svm_to_delete_id }}
@@ -167,7 +167,7 @@
       failed_when: false
 
     - name: Wait for SVM to be deleted
-      command: >
+      ansible.builtin.command: >
         aws fsx describe-storage-virtual-machines
         --region {{ aws_region }}
         --storage-virtual-machine-ids {{ svm_to_delete_id }}
@@ -200,7 +200,7 @@
         not (svm_deletion_complete | default(false))
 
     - name: Delete FSx file system (only after SVM is deleted or if no SVM exists)
-      command: >
+      ansible.builtin.command: >
         aws fsx delete-file-system
         --region {{ aws_region }}
         --file-system-id {{ fsx_to_delete_id }}
@@ -220,7 +220,7 @@
       when: fsx_delete_result is defined
 
     - name: Wait for FSx file system to be deleted
-      command: >
+      ansible.builtin.command: >
         aws fsx describe-file-systems
         --region {{ aws_region }}
         --file-system-ids {{ fsx_to_delete_id }}
