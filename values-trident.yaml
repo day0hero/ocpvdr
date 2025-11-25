@@ -1,5 +1,5 @@
 tridentFSX:
   iscsi:
-    mgmtLIF: svm-mgmt.someGUID.amazonaws.com # ManagementLIF address
-    svm: SVM1 # SVM name
+    mgmtLIF: management.fs-0766581407c1bb1a7.fsx.us-west-1.amazonaws.com
+    svm: SVM1
 
