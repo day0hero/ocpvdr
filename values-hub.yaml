@@ -36,6 +36,7 @@ clusterGroup:
     vault:
     golang-external-secrets:
     trident:
+    openshift-cnv:
   subscriptions:
     acm:
       name: advanced-cluster-management
@@ -47,9 +48,15 @@ clusterGroup:
       namespace: openshift-operators
       channel: stable
       source: certified-operators
+    ocpv:
+      name: kubevirt-hyperconverged
+      namespace: openshift-cnv
+      channel: stable
+
   argoProjects:
     - hub
     - trident
+    - openshift-virt
 
   # Explicitly mention the cluster-state based overrides we plan to use for this pattern.
   # We can use self-referential variables because the chart calls the tpl function with these variables defined
