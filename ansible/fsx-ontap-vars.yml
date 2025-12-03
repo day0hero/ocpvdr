@@ -11,7 +11,8 @@
 #   - "rtb-0123456789abcdef0"
 
 # AWS Region
-aws_region: "us-west-1"
+# aws_region should be provided via command line: -e aws_region=<region>
+# aws_region: "us-west-1"  # Commented out - must be provided via -e aws_region parameter
 
 # Option 2: Look up by name or tag (uncomment and use these instead)
 # These will be auto-derived from cluster_name if not set
