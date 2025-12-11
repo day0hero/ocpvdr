@@ -9,16 +9,47 @@
       meta: end_play
       when: delete_resources | default(false)
 
-    - name: Set vpc_name fact from cluster_name
+    - name: Check if this is an HCP cluster
+      kubernetes.core.k8s_info:
+        api_version: config.openshift.io/v1
+        kind: Infrastructure
+        name: cluster
+      register: infrastructure_info
+      failed_when: false
+
+    - name: Set is_hcp_cluster fact from infrastructure
+      set_fact:
+        is_hcp_cluster: "{{ infrastructure_info.resources[0].status.controlPlaneTopology | default('') == 'External' if (infrastructure_info.resources is defined and infrastructure_info.resources | length > 0) else false }}"
+
+    - name: Set vpc_name fact from cluster_name (standard cluster)
       set_fact:
         vpc_name: "{{ cluster_name }}-vpc"
-      when: cluster_name is defined
+      when: 
+        - cluster_name is defined
+        - not (is_hcp_cluster | default(false) | bool)
 
-    - name: Set subnet names from cluster_name
+    - name: Set vpc_name fact from cluster_name (HCP cluster)
+      set_fact:
+        vpc_name: "{{ cluster_name }}-vpc"
+      when: 
+        - cluster_name is defined
+        - is_hcp_cluster | default(false) | bool
+
+    - name: Set subnet names from cluster_name (standard cluster)
       set_fact:
         subnet_1_name: "{{ cluster_name }}-private-{{ aws_region }}b"
         subnet_2_name: "{{ cluster_name }}-private-{{ aws_region }}c"
-      when: cluster_name is defined
+      when: 
+        - cluster_name is defined
+        - not (is_hcp_cluster | default(false) | bool)
+
+    - name: Set subnet names from cluster_name (HCP cluster)
+      set_fact:
+        subnet_1_name: "{{ cluster_name }}-private-{{ aws_region }}b"
+        subnet_2_name: "{{ cluster_name }}-private-{{ aws_region }}c"
+      when: 
+        - cluster_name is defined
+        - is_hcp_cluster | default(false) | bool
 
     - name: Debug network configuration before role execution
       debug:
@@ -26,22 +57,115 @@
           - "Network Configuration:"
           - "  cluster_name: {{ cluster_name | default('not set') }}"
           - "  aws_region: {{ aws_region | default('not set') }}"
+          - "  is_hcp_cluster: {{ is_hcp_cluster | default('not set') }}"
           - "  vpc_name: {{ vpc_name | default('not set') }}"
           - "  subnet_1_name: {{ subnet_1_name | default('not set') }}"
           - "  subnet_2_name: {{ subnet_2_name | default('not set') }}"
 
-    - name: Test VPC lookup directly
+    - name: Test VPC lookup by name (standard cluster)
       amazon.aws.ec2_vpc_net_info:
         region: "{{ aws_region }}"
         filters:
           "tag:Name": "{{ vpc_name }}"
       register: test_vpc_lookup
-      when: vpc_name is defined and vpc_name != ""
+      when: 
+        - vpc_name is defined and vpc_name != ""
+        - not (is_hcp_cluster | default(false) | bool)
+
+    - name: Test VPC lookup by name (HCP cluster - primary method)
+      amazon.aws.ec2_vpc_net_info:
+        region: "{{ aws_region }}"
+        filters:
+          "tag:Name": "{{ vpc_name }}"
+      register: test_vpc_lookup_hcp_name
+      when: 
+        - vpc_name is defined and vpc_name != ""
+        - is_hcp_cluster | default(false) | bool
+
+    - name: Test VPC lookup by cluster tag (HCP cluster - fallback method)
+      amazon.aws.ec2_vpc_net_info:
+        region: "{{ aws_region }}"
+        filters:
+          "tag:sigs.k8s.io/cluster-api-provider-aws/cluster/{{ cluster_name }}": owned
+      register: test_vpc_lookup_hcp_tag
+      when: 
+        - vpc_name is defined and vpc_name != ""
+        - is_hcp_cluster | default(false) | bool
+        - test_vpc_lookup_hcp_name.vpcs | default([]) | length == 0
+
+    - name: Set VPC lookup result for HCP cluster
+      set_fact:
+        test_vpc_lookup:
+          vpcs: "{{ test_vpc_lookup_hcp_tag.vpcs if (test_vpc_lookup_hcp_tag.vpcs | default([]) | length > 0) else test_vpc_lookup_hcp_name.vpcs }}"
+      when: 
+        - is_hcp_cluster | default(false) | bool
+        - test_vpc_lookup_hcp_name is defined
 
     - name: Display VPC lookup test result
       debug:
         var: test_vpc_lookup
       when: test_vpc_lookup is defined
+
+    - name: Display HCP VPC lookup details
+      debug:
+        msg:
+          - "HCP VPC Lookup Results:"
+          - "  By name: {{ 'found' if (test_vpc_lookup_hcp_name.vpcs | default([]) | length > 0) else 'not found' }}"
+          - "  By cluster tag: {{ 'found' if (test_vpc_lookup_hcp_tag.vpcs | default([]) | length > 0) else 'not found' }}"
+      when: 
+        - is_hcp_cluster | default(false) | bool
+        - test_vpc_lookup_hcp_name is defined
+
+    - name: Get VPC ID from lookup result
+      set_fact:
+        vpc_id_from_lookup: "{{ test_vpc_lookup.vpcs[0].vpc_id if (test_vpc_lookup.vpcs | default([]) | length > 0) else '' }}"
+      when: test_vpc_lookup is defined
+
+    - name: Test subnet lookup by name (standard cluster)
+      amazon.aws.ec2_vpc_subnet_info:
+        region: "{{ aws_region }}"
+        filters:
+          vpc-id: "{{ vpc_id_from_lookup }}"
+          "tag:Name": "{{ subnet_1_name }}"
+      register: test_subnet_1_lookup
+      when: 
+        - vpc_id_from_lookup is defined and vpc_id_from_lookup != ""
+        - subnet_1_name is defined and subnet_1_name != ""
+        - not (is_hcp_cluster | default(false) | bool)
+
+    - name: Test subnet lookup by name (HCP cluster)
+      amazon.aws.ec2_vpc_subnet_info:
+        region: "{{ aws_region }}"
+        filters:
+          vpc-id: "{{ vpc_id_from_lookup }}"
+          "tag:Name": "{{ subnet_1_name }}"
+      register: test_subnet_1_lookup_hcp
+      when: 
+        - vpc_id_from_lookup is defined and vpc_id_from_lookup != ""
+        - subnet_1_name is defined and subnet_1_name != ""
+        - is_hcp_cluster | default(false) | bool
+
+    - name: Test subnet lookup by private tag (HCP cluster - fallback)
+      amazon.aws.ec2_vpc_subnet_info:
+        region: "{{ aws_region }}"
+        filters:
+          vpc-id: "{{ vpc_id_from_lookup }}"
+          "tag:sigs.k8s.io/cluster-api-provider-aws/role": private
+      register: test_subnet_lookup_hcp_tag
+      when: 
+        - vpc_id_from_lookup is defined and vpc_id_from_lookup != ""
+        - is_hcp_cluster | default(false) | bool
+        - test_subnet_1_lookup_hcp.subnets | default([]) | length == 0
+
+    - name: Display subnet lookup results
+      debug:
+        msg:
+          - "Subnet Lookup Results:"
+          - "  subnet_1_name: {{ subnet_1_name | default('not set') }}"
+          - "  subnet_1 found: {{ 'yes' if ((test_subnet_1_lookup.subnets | default([]) | length > 0) or (test_subnet_1_lookup_hcp.subnets | default([]) | length > 0)) else 'no' }}"
+          - "  HCP fallback (by tag): {{ 'found ' + (test_subnet_lookup_hcp_tag.subnets | default([]) | length | string) + ' subnets' if (is_hcp_cluster | default(false) | bool and test_subnet_lookup_hcp_tag is defined) else 'not checked' }}"
+      when: 
+        - test_subnet_1_lookup is defined or test_subnet_1_lookup_hcp is defined
 
     - name: Load values-global.yaml to get pattern name
       set_fact:
