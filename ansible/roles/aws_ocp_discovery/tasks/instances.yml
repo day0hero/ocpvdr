@@ -1,0 +1,14 @@
+---
+- name: Set instance filters
+  ansible.builtin.set_fact:
+    instance_filters: |
+      {
+        "vpc-id": "{{ aws_vpc_id }}",
+        "tag:kubernetes.io/cluster/{{ ocp_infra_name }}": "owned"
+      }
+
+- name: Lookup instances owned by this cluster
+  amazon.aws.ec2_instance_info:
+    region: "{{ ocp_aws_region }}"
+    filters: "{{ instance_filters }}"
+  register: aws_ec2_instances

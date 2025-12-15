@@ -7,7 +7,7 @@
     - name: Lookup FSx file system by name
       ansible.builtin.command: >
         aws fsx describe-file-systems
-        --region {{ aws_region }}
+        --region {{ ocp_aws_region }}
         --output json
       register: fsx_lookup_delete
       changed_when: false
@@ -21,7 +21,7 @@
           - "FSx lookup stderr: {{ fsx_lookup_delete.stderr | default('(no error)') }}"
           - "FSx lookup stdout (first 500 chars): {{ (fsx_lookup_delete.stdout | default(''))[:500] }}"
           - "File system name to find: {{ file_system_name }}"
-          - "AWS Region: {{ aws_region }}"
+          - "AWS Region: {{ ocp_aws_region }}"
 
     - name: Warn if FSx lookup failed
       debug:
@@ -31,7 +31,7 @@
           - "This might mean:"
           - "  - The filesystem was already deleted"
           - "  - AWS credentials don't have fsx:DescribeFileSystems permission"
-          - "  - The region {{ aws_region }} is incorrect"
+          - "  - The region {{ ocp_aws_region }} is incorrect"
           - "  - There are no ONTAP filesystems in this region"
       when: fsx_lookup_delete.rc != 0
 
@@ -89,7 +89,7 @@
     - name: Lookup all SVMs for deletion
       ansible.builtin.command: >
         aws fsx describe-storage-virtual-machines
-        --region {{ aws_region }}
+        --region {{ ocp_aws_region }}
         --output json
       register: svm_lookup_delete
       changed_when: false
@@ -159,7 +159,7 @@
     - name: Delete Storage Virtual Machine (SVM) - MUST BE DONE BEFORE FILESYSTEM
       ansible.builtin.command: >
         aws fsx delete-storage-virtual-machine
-        --region {{ aws_region }}
+        --region {{ ocp_aws_region }}
         --storage-virtual-machine-id {{ svm_to_delete_id }}
         --output json
       register: svm_delete_result
@@ -169,7 +169,7 @@
     - name: Wait for SVM to be deleted
       ansible.builtin.command: >
         aws fsx describe-storage-virtual-machines
-        --region {{ aws_region }}
+        --region {{ ocp_aws_region }}
         --storage-virtual-machine-ids {{ svm_to_delete_id }}
         --query "StorageVirtualMachines[0].Lifecycle"
         --output text
@@ -202,7 +202,7 @@
     - name: Delete FSx file system (only after SVM is deleted or if no SVM exists)
       ansible.builtin.command: >
         aws fsx delete-file-system
-        --region {{ aws_region }}
+        --region {{ ocp_aws_region }}
         --file-system-id {{ fsx_to_delete_id }}
         --output json
       register: fsx_delete_result
@@ -222,7 +222,7 @@
     - name: Wait for FSx file system to be deleted
       ansible.builtin.command: >
         aws fsx describe-file-systems
-        --region {{ aws_region }}
+        --region {{ ocp_aws_region }}
         --file-system-ids {{ fsx_to_delete_id }}
         --query "FileSystems[0].Lifecycle"
         --output text
@@ -241,7 +241,7 @@
 
     - name: Delete Secrets Manager secrets
       community.aws.secretsmanager_secret:
-        region: "{{ aws_region }}"
+        region: "{{ ocp_aws_region }}"
         name: "{{ item }}"
         state: absent
       loop:
@@ -252,7 +252,7 @@
 
     - name: Delete security group
       amazon.aws.ec2_security_group:
-        region: "{{ aws_region }}"
+        region: "{{ ocp_aws_region }}"
         name: "{{ file_system_name }}-sg"
         state: absent
       failed_when: false

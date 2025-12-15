@@ -1,0 +1,33 @@
+---
+- name: Discover cluster details
+  ansible.builtin.include_tasks: cluster.yml
+
+- name: Discover VPC details
+  ansible.builtin.include_tasks: vpc.yml
+  when:
+    - "'vpc' in aws_ocp_discovery_query_items"
+
+- name: Discover instance details
+  ansible.builtin.include_tasks: instances.yml
+  when:
+    - "'instances' in aws_ocp_discovery_query_items"
+
+- name: Discover subnet details
+  ansible.builtin.include_tasks: subnets.yml
+  when:
+    - "'subnets' in aws_ocp_discovery_query_items"
+
+- name: Discover private subnet details
+  ansible.builtin.include_tasks: private_subnets.yml
+  when:
+    - "'private_subnets' in aws_ocp_discovery_query_items"
+
+- name: Discover public subnet details
+  ansible.builtin.include_tasks: public_subnets.yml
+  when:
+    - "'public_subnets' in aws_ocp_discovery_query_items"
+
+- name: Discover route tables
+  ansible.builtin.include_tasks: rtbs.yml
+  when:
+    - "'route_tables' in aws_ocp_discovery_query_items"
