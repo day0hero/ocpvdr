@@ -2,7 +2,7 @@ clusterGroup:
   name: hub
   isHubCluster: true
   argoCD:
-    resourceHealthChecks: 
+    resourceHealthChecks:
     - kind: TridentOrchestrator
       group: trident.netapp.io
       check: |

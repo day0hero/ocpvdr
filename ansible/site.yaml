@@ -3,15 +3,33 @@
   hosts: localhost
   gather_facts: false
   vars_files:
-    - "{{ playbook_dir }}/fsx-ontap-vars.yml"
+    - "{{ playbook_dir }}/vars/fsx-ontap-vars.yml"
   tasks:
     - name: Skip creation if deletion is requested
-      meta: end_play
+      ansible.builtin.meta: end_play
       when: delete_resources | default(false)
 
     - name: Discover AWS values
       ansible.builtin.include_role:
         name: aws_ocp_discovery
+
+    - name: Display AWS and Cluster discovery results
+      ansible.builtin.debug:
+        msg:
+          - "Cluster lookup results:"
+          - "  ocp_infra_name: {{ ocp_infra_name }}"
+          - "  ocp_platform: {{ ocp_platform }}"
+          - "  ocp_aws_region: {{ ocp_aws_region }}"
+          - "  ocp_app_domain: {{ ocp_app_domain }}"
+          - "  ocp_version: {{ ocp_version }}"
+          - "  ocp_base_domain: {{ ocp_base_domain }}"
+          - "  ocp_cluster_name: {{ ocp_base_domain }}"
+          - "VPC Lookup Results:"
+          - "  aws_vpc_id: {{ aws_vpc_id }}"
+          - "Subnet Lookup Results:"
+          - "  aws_vpc_private_subnet_ids: {{ aws_vpc_private_subnet_ids }}"
+          - "Route Table Lookup Results:"
+          - "  aws_vpc_route_table_ids: {{ aws_vpc_route_table_ids }}"
 
     - name: Load values-global.yaml to get pattern name
       ansible.builtin.set_fact:
@@ -107,7 +125,7 @@
         path: "{{ playbook_dir }}/../overrides/values-trident.yaml"
         regexp: '^(\s{4})mgmtLIF:\s+.*'
         replace: '\1mgmtLIF: {{ svm_mgmt_dns_name }}'
-      when: 
+      when:
         - not (delete_resources | default(false))
         - svm_mgmt_dns_name is defined
         - svm_mgmt_dns_name != ""
@@ -134,6 +152,10 @@
   hosts: localhost
   gather_facts: false
   tasks:
+    - name: Discover AWS values
+      ansible.builtin.include_role:
+        name: aws_ocp_discovery
+
     - name: Delete FSx ONTAP resources
       ansible.builtin.include_role:
         name: fsx_ontap

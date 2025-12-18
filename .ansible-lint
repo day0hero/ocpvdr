@@ -8,6 +8,13 @@ exclude_paths:
   - charts/
   - common/
   - tests/
+  - /*.yaml
+
+skip_list:
+  - var-naming
+
+warn_list:
+  - var-spacing
 
 # warn_list:
 #   - yaml

@@ -42,8 +42,7 @@ create_secrets: true  # Set to false to skip creating secrets in AWS Secrets Man
 delete_resources: false  # Set to true to delete all resources created by this role
 
 # Tags
-tags:
+fsx_resource_tags:
   Name: "OntapFileSystem_MAZ"
   Environment: "production"
   ManagedBy: "Ansible"
-

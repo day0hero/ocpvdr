@@ -30,7 +30,11 @@
 
 - name: Determine if we are on hosted control plane (HCP)
   ansible.builtin.set_fact:
-    is_hcp_cluster: "{{ cluster_info.resources[0].status.controlPlaneTopology | default('') == 'External' if (cluster_info.resources is defined and cluster_info.resources | length > 0) else false }}"
+    is_hcp_cluster: "{{ cluster_info.resources[0].status.controlPlaneTopology
+      | default('') == 'External'
+      if (cluster_info.resources is defined
+        and cluster_info.resources | length > 0)
+      else false }}"
 
 - name: Set directly retrievable facts
   ansible.builtin.set_fact:

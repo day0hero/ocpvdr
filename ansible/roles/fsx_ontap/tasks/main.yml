@@ -145,13 +145,15 @@
         cidr_ip: "{{ allowed_cidr }}"
         from_port: 11105
         to_port: 11105
-    tags: "{{ tags }}"
+    resource_tags: "{{ sg_resource_tags }}"
   register: security_group
   when: existing_sg_check.security_groups | default([]) | length == 0
 
 - name: Get security group ID from existing or created
   ansible.builtin.set_fact:
-    security_group_id: "{{ existing_sg_check.security_groups[0].group_id if (existing_sg_check.security_groups | default([]) | length > 0) else security_group.group_id }}"
+    security_group_id: "{{ existing_sg_check.security_groups[0].group_id
+      if (existing_sg_check.security_groups | default([]) | length > 0)
+      else security_group.group_id }}"
 
 - name: Check if FSx file system already exists
   ansible.builtin.command: >
@@ -206,6 +208,11 @@
       - "  Will create new filesystem: {{ (existing_fsx_id | default('')) == '' }}"
       - "  Will skip creation: {{ (existing_fsx_id | default('')) != '' }}"
 
+- name: Fail if we do not have two subnet IDs
+  ansible.builtin.fail:
+    msg: "FSx for ONTAP Multi-AZ config requires exactly two subnet IDs. We have {{ aws_vpc_private_subnet_ids }}"
+  when: aws_vpc_private_subnet_ids | length != 2
+
 - name: Create FSx for ONTAP file system
   ansible.builtin.shell: |
     aws fsx create-file-system \
@@ -217,7 +224,7 @@
     --security-group-ids {{ security_group_id }} \
     --ontap-configuration '{
       "DeploymentType": "{{ deployment_type }}",
-      "PreferredSubnetId": "{{ aws_vpc_private_subnets_ids | first }}",
+      "PreferredSubnetId": "{{ aws_vpc_private_subnet_ids | first }}",
       "RouteTableIds": {{ aws_vpc_route_table_ids | to_json }},
       "ThroughputCapacity": {{ throughput_capacity }},
       "WeeklyMaintenanceStartTime": "{{ weekly_maintenance_time }}",
@@ -228,11 +235,12 @@
     }' \
     --tags \
       Key=Name,Value={{ file_system_name }} \
-      Key=Environment,Value={{ tags.Environment }} \
-      Key=ManagedBy,Value={{ tags.ManagedBy }} \
+      Key=Environment,Value={{ fsx_resource_tags.Environment }} \
+      Key=ManagedBy,Value={{ fsx_resource_tags.ManagedBy }} \
     --output json
   register: fsx_create_result
   when: existing_fsx_id | default('') == ''
+  changed_when: true
   environment:
     AWS_DEFAULT_REGION: "{{ ocp_aws_region }}"
 
@@ -253,6 +261,7 @@
     --file-system-ids {{ fsx_filesystem_id }}
     --query "FileSystems[0].Lifecycle"
     --output text
+  changed_when: false
   register: fsx_status
   until: fsx_status.stdout == "AVAILABLE"
   retries: 60
@@ -273,7 +282,7 @@
     fsx_filesystem_data: "{{ (fsx_details.stdout | from_json).FileSystems[0] }}"
 
 - name: Extract FSx DNS name
-  set_fact:
+  ansible.builtin.set_fact:
     fsx_dns_name: "{{ fsx_filesystem_data.DNSName | default(fsx_filesystem_data.OntapConfiguration.Endpoints.Management.DNSName | default('N/A')) }}"
   when: fsx_filesystem_data is defined
 
@@ -307,6 +316,7 @@
     --output json
   register: svm_create_result
   when: existing_svm_id == ""
+  changed_when: true
   environment:
     AWS_DEFAULT_REGION: "{{ ocp_aws_region }}"
 
@@ -332,6 +342,7 @@
   retries: 20
   delay: 30
   when: existing_svm_id == "" and svm_create_result is defined
+  changed_when: false
 
 - name: Get SVM details
   ansible.builtin.command: >
@@ -373,10 +384,10 @@
     description: "FSx Admin Password for {{ file_system_name }}"
     secret: "{\"username\":\"fsxadmin\",\"password\":\"{{ fsx_admin_password }}\"}"
     secret_type: string
-    tags:
+    resource_tags:
       Name: "{{ file_system_name }}"
-      Environment: "{{ tags.Environment }}"
-      ManagedBy: "{{ tags.ManagedBy }}"
+      Environment: "{{ fsx_resource_tags.Environment }}"
+      ManagedBy: "{{ fsx_resource_tags.ManagedBy }}"
   register: fsx_secret
   when: >
     create_secrets | default(true) and
@@ -414,10 +425,10 @@
     description: "SVM Admin Password for {{ file_system_name }}"
     secret: "{\"username\":\"vsadmin\",\"password\":\"{{ svm_admin_password }}\"}"
     secret_type: string
-    tags:
+    resource_tags:
       Name: "{{ file_system_name }}"
-      Environment: "{{ tags.Environment }}"
-      ManagedBy: "{{ tags.ManagedBy }}"
+      Environment: "{{ fsx_resource_tags.Environment }}"
+      ManagedBy: "{{ fsx_resource_tags.ManagedBy }}"
   register: svm_secret
   when: >
     create_secrets | default(true) and
@@ -439,11 +450,19 @@
 
 - name: Get or set FSx Admin secret ARN
   ansible.builtin.set_fact:
-    fsx_secret_arn: "{{ fsx_secret_check.stdout if (fsx_secret_check.stdout != '' and fsx_secret_check.stdout != 'None') else (fsx_secret.secret.arn | default('') if (fsx_secret is defined and fsx_secret.secret is defined) else '') }}"
+    fsx_secret_arn: "{{ fsx_secret_check.stdout
+      if (fsx_secret_check.stdout != '' and fsx_secret_check.stdout != 'None')
+      else (fsx_secret.secret.arn | default('')
+        if (fsx_secret is defined and fsx_secret.secret is defined)
+        else '') }}"
 
 - name: Get or set SVM Admin secret ARN
   ansible.builtin.set_fact:
-    svm_secret_arn: "{{ svm_secret_check.stdout if (svm_secret_check.stdout != '' and svm_secret_check.stdout != 'None') else (svm_secret.secret.arn | default('') if (svm_secret is defined and svm_secret.secret is defined) else '') }}"
+    svm_secret_arn: "{{ svm_secret_check.stdout
+      if (svm_secret_check.stdout != '' and svm_secret_check.stdout != 'None')
+      else (svm_secret.secret.arn | default('')
+        if (svm_secret is defined and svm_secret.secret is defined)
+        else '') }}"
 
 - name: Display Output Summary
   ansible.builtin.debug:
