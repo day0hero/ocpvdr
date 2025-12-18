@@ -2,7 +2,7 @@ clusterGroup:
   name: hub
   isHubCluster: true
   argoCD:
-    resourceHealthChecks: 
+    resourceHealthChecks:
     - kind: TridentOrchestrator
       group: trident.netapp.io
       check: |
@@ -63,7 +63,7 @@ clusterGroup:
   sharedValueFiles:
     - '/overrides/values-{{ $.Values.global.clusterPlatform }}.yaml'
     - '/overrides/values-{{ $.Values.global.clusterVersion }}-{{ $.Values.clusterGroup.name }}.yaml'
-    - '/values-trident.yaml'
+    - '/overrides/values-trident.yaml'
   # sharedValueFiles is a flexible mechanism that will add the listed valuefiles to every app defined in the
   # applications section. We intend this to supplement and possibly even replace previous "magic" mechanisms, though
   # we do not at present have a target date for removal.

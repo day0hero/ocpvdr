@@ -1,0 +1,14 @@
+---
+- name: Set filters
+  ansible.builtin.set_fact:
+    subnet_filters: |
+      {
+        "vpc-id": "{{ aws_vpc_id }}",
+        "tag:kubernetes.io/cluster/{{ ocp_infra_name }}": "owned"
+      }
+
+- name: Lookup subnets by tags to get names
+  amazon.aws.ec2_vpc_subnet_info:
+    region: "{{ ocp_aws_region }}"
+    filters: "{{ subnet_filters }}"
+  register: aws_vpc_subnets

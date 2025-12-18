@@ -3,6 +3,9 @@ collections:
   - name: amazon.aws
     version: ">=5.0.0"
 
+  - name: community.aws
+
+  - name: kubernetes.core
 # Note: This playbook uses AWS CLI for FSx operations.
 # Ensure AWS CLI is installed and configured with appropriate credentials:
 #   pip install awscli
@@ -17,4 +20,3 @@ collections:
 #   - ec2:AuthorizeSecurityGroupIngress
 #   - secretsmanager:CreateSecret
 #   - secretsmanager:DescribeSecret
-

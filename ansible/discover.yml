@@ -1,0 +1,10 @@
+---
+- name: Discovery play
+  hosts: localhost
+  gather_facts: false
+  become: false
+  connection: local
+  tasks:
+    - name: Discover
+      ansible.builtin.include_role:
+        name: aws_ocp_discovery

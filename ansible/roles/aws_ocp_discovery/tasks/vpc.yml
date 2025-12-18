@@ -1,0 +1,20 @@
+---
+- name: Set vpc_name
+  ansible.builtin.set_fact:
+    ocp_vpc_name: "{{ ocp_infra_name }}-vpc"
+  when:
+    - ocp_cluster_name is defined
+
+- name: Test VPC lookup by name (standard cluster)
+  amazon.aws.ec2_vpc_net_info:
+    region: "{{ ocp_aws_region }}"
+    filters:
+      "tag:Name": "{{ ocp_vpc_name }}"
+  register: vpc_lookup
+  when:
+    - vpc_name is not defined
+    - ocp_vpc_name is defined and ocp_vpc_name != ""
+
+- name: Set vpc ID
+  ansible.builtin.set_fact:
+    aws_vpc_id: "{{ vpc_lookup.vpcs[0].id }}"

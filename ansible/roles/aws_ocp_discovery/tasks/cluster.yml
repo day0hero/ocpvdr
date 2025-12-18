@@ -1,0 +1,51 @@
+---
+- name: Discover cluster infrastructure
+  kubernetes.core.k8s_info:
+    kind: Infrastructure
+    name: cluster
+  register: cluster_info
+  until: cluster_info.resources | length > 0
+  retries: 20
+  delay: 5
+
+- name: Discover cluster ingress
+  kubernetes.core.k8s_info:
+    api_version: config.openshift.io/v1
+    kind: ingress
+    name: cluster
+  register: ingress_info
+  until: ingress_info.resources | length > 0
+  retries: 20
+  delay: 5
+
+- name: Discover cluster version
+  kubernetes.core.k8s_info:
+    api_version: config.openshift.io/v1
+    kind: ClusterVersion
+    name: version
+  register: version_info
+  until: version_info.resources | length > 0
+  retries: 20
+  delay: 5
+
+- name: Determine if we are on hosted control plane (HCP)
+  ansible.builtin.set_fact:
+    is_hcp_cluster: "{{ cluster_info.resources[0].status.controlPlaneTopology
+      | default('') == 'External'
+      if (cluster_info.resources is defined
+        and cluster_info.resources | length > 0)
+      else false }}"
+
+- name: Set directly retrievable facts
+  ansible.builtin.set_fact:
+    ocp_infra_name: "{{ cluster_info.resources[0].status.infrastructureName }}"
+    ocp_platform: "{{ cluster_info.resources[0].status.platform }}"
+    ocp_aws_region: "{{ cluster_info.resources[0].status.platformStatus.aws.region }}"
+    ocp_app_domain: "{{ ingress_info.resources[0].spec.domain }}"
+    ocp_version: "{{ version_info.resources[0].status.desired.version }}"
+    ocp_cluster_name_labels: "{{ ingress_info.resources[0].spec.domain | split('.') }}"
+
+- name: Derive facts
+  ansible.builtin.set_fact:
+    ocp_base_domain: "{{ ocp_cluster_name_labels[2:] | join('.') }}"
+    ocp_cluster_name: "{{ ocp_cluster_name_labels[1] }}"

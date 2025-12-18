@@ -1,0 +1,7 @@
+---
+aws_ocp_discovery_rtb_association_type: "private"
+
+aws_ocp_discovery_query_items:
+  - vpc
+  - private_subnets
+  - route_tables
