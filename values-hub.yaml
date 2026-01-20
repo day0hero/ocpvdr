@@ -112,6 +112,11 @@ clusterGroup:
       chart: trident-protect
       repoURL: https://netapp.github.io/trident-protect-helm-chart
       chartVersion: 100.2510.0
+    protect-config:
+      name: trident-protect-config
+      namespace: trident-protect
+      argoProject: trident
+      path: charts/all/trident-protect-config
     virt:
       name: openshift-virtualization
       namespace: openshift-cnv

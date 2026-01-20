@@ -2,3 +2,20 @@ tridentFSX:
   iscsi:
     mgmtLIF: svm-044dcb4f19d3350a4.fs-0f5d7c7c441dc4561.fsx.us-west-1.amazonaws.com
     svm: SVM1
+
+# Trident Protect configuration
+tridentProtect:
+  appVault:
+    enabled: true
+    name: ontap-s3-appvault
+    providerType: ONTAP-S3
+    credentials:
+      key: secret/data/global/trident-protect-s3
+      secretName: trident-protect-s3-creds
+    s3:
+      # FSx ONTAP S3 endpoint - update with your SVM S3 endpoint
+      endpoint: "https://svm-044dcb4f19d3350a4.fs-0f5d7c7c441dc4561.fsx.us-west-1.amazonaws.com:443"
+      bucketName: "trident-protect"
+      region: us-west-1
+      secure: true
+      skipCertValidation: true  # Set to false if using valid SSL cert
