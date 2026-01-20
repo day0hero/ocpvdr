@@ -22,5 +22,5 @@ tridentProtect:
       secretName: trident-protect-s3-creds
     # S3 configuration
     s3:
-      bucketName: ""  # e.g., trident-protect-backups
+      bucketName: ocpvdr-trident-protect
       region: us-west-1
