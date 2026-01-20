@@ -36,6 +36,7 @@ clusterGroup:
     vault:
     golang-external-secrets:
     trident:
+    trident-protect:
     openshift-cnv:
   subscriptions:
     acm:
@@ -104,6 +105,12 @@ clusterGroup:
       namespace: trident
       path: charts/all/trident
       argoProject: trident
+    protect:
+      name: trident-protect
+      namespace: trident-protect
+      argoProject: trident
+      chart: trident-protect
+      repoURL: https://netapp.github.io/trident-protect-helm-chart
     virt:
       name: openshift-virtualization
       namespace: openshift-cnv
