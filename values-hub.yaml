@@ -111,6 +111,7 @@ clusterGroup:
       argoProject: trident
       chart: trident-protect
       repoURL: https://netapp.github.io/trident-protect-helm-chart
+      chartVersion: 100.2510.0
     virt:
       name: openshift-virtualization
       namespace: openshift-cnv
