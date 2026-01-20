@@ -17,10 +17,11 @@ tridentProtect:
     providerType: AWS
     # Credentials from Vault
     credentials:
-      # Vault path (without secret/data prefix - that's added by the ClusterSecretStore)
+      # Vault path for ExternalSecret
       vaultPath: secret/data/hub/aws
       secretName: trident-protect-s3-creds
-    # S3 configuration
+    # S3 configuration (used for all S3-compatible providers including AWS)
     s3:
+      # AWS S3 endpoint format: https://s3.<region>.amazonaws.com
+      endpoint: https://s3.us-west-1.amazonaws.com
       bucketName: ocpvdr-trident-protect
-      region: us-west-1

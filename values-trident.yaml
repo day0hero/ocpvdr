@@ -13,5 +13,5 @@ tridentProtect:
       vaultPath: secret/data/hub/aws
       secretName: trident-protect-s3-creds
     s3:
-      bucketName: "ocpvdr-trident-protect"  # Create this bucket in AWS S3
-      region: us-west-1
+      endpoint: https://s3.us-west-1.amazonaws.com
+      bucketName: ocpvdr-trident-protect
