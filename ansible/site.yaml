@@ -128,13 +128,13 @@
         tag_filters_list:
           - key: "vpc-id"
             value: "{{ vpc_id_from_lookup }}"
-          - key: "tag:sigs.k8s.io/cluster-api-provider-aws/role"
-            value: "private"
+          - key: "tag:kubernetes.io/role/internal-elb"
+            value: "1"
       when:
         - vpc_id_from_lookup is defined and vpc_id_from_lookup != ""
         - is_hcp_cluster | default(false) | bool
 
-    - name: Lookup subnets by tags to get names
+    - name: Lookup subnets by tags to get names (non-HCP)
       amazon.aws.ec2_vpc_subnet_info:
         region: "{{ aws_region }}"
         filters: "{{ subnet_tag_filters }}"
@@ -142,6 +142,15 @@
       when:
         - vpc_id_from_lookup is defined and vpc_id_from_lookup != ""
         - not (is_hcp_cluster | default(false) | bool)
+
+    - name: Lookup subnets by tags to get names (HCP)
+      amazon.aws.ec2_vpc_subnet_info:
+        region: "{{ aws_region }}"
+        filters: "{{ subnet_tag_filters }}"
+      register: tag_subnets
+      when:
+        - vpc_id_from_lookup is defined and vpc_id_from_lookup != ""
+        - is_hcp_cluster | default(false) | bool
 
     - name: Set name facts for discovered subnets
       set_fact:
@@ -158,6 +167,8 @@
         subnet_2_id: "{{ tag_subnets.subnets[1].id }}"
         subnet_2_name: "{{ tag_subnets.subnets[1].tags.Name }}"
       when:
+        - tag_subnets is defined
+        - tag_subnets.subnets is defined
         - tag_subnets.subnets | length == 2
 
     - name: Find route tables based on subnet query
