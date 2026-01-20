@@ -6,7 +6,7 @@ metadata:
     deployOVS: 'false'
   namespace: openshift-cnv
 spec:
-  enableCommonBootImageImport: true
+#  enableCommonBootImageImport: true
   virtualMachineOptions:
     disableFreePageReporting: false
     disableSerialConsoleLog: false
@@ -26,7 +26,7 @@ spec:
     server:
       duration: 24h0m0s
       renewBefore: 12h0m0s
-  enableApplicationAwareQuota: false
+#  enableApplicationAwareQuota: false
   applicationAwareConfig:
     allowApplicationAwareClusterResourceQuota: false
     vmiCalcConfigName: DedicatedVirtualResources
@@ -41,7 +41,7 @@ spec:
     batchEvictionSize: 10
     workloadUpdateMethods:
       - LiveMigrate
-  deployVmConsoleProxy: false
+#  deployVmConsoleProxy: false
   uninstallStrategy: BlockUninstallIfWorkloadsExist
   resourceRequirements:
     vmiCPUAllocationRatio: 10

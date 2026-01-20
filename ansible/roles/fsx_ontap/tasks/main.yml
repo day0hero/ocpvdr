@@ -81,85 +81,14 @@
     lookup_subnet_1: "{{ (subnet_1_id is not defined or subnet_1_id == '' or subnet_1_id == 'subnet-xxxxxxxxxxxxxxxxx' or not (subnet_1_id | regex_search('^subnet-'))) and (subnet_1_name != '' or subnet_1_tag != '') }}"
     lookup_subnet_2: "{{ (subnet_2_id is not defined or subnet_2_id == '' or subnet_2_id == 'subnet-xxxxxxxxxxxxxxxxx' or not (subnet_2_id | regex_search('^subnet-'))) and (subnet_2_name != '' or subnet_2_tag != '') }}"
 
-- name: Look up subnet 1 ID by name
+- name: Look up subnets by private tag
   amazon.aws.ec2_vpc_subnet_info:
     region: "{{ aws_region }}"
     filters:
       vpc-id: "{{ vpc_id }}"
-      "tag:Name": "{{ subnet_1_name }}"
-  register: subnet_1_lookup_result_name
-  when: lookup_subnet_1 | default(false) and subnet_1_name != ''
-
-- name: Check if subnet 1 name lookup found a subnet
-  set_fact:
-    subnet_1_found_by_name: "{{ subnet_1_lookup_result_name.subnets | length > 0 }}"
-  when: lookup_subnet_1 | default(false) and subnet_1_name != '' and subnet_1_lookup_result_name is defined
-
-- name: Set subnet 1 ID from name lookup
-  set_fact:
-    subnet_1_id: "{{ subnet_1_lookup_result_name.subnets[0].id }}"
-  when: lookup_subnet_1 | default(false) and subnet_1_found_by_name | default(false)
-
-- name: Look up subnet 1 ID by tag (fallback if name lookup failed)
-  amazon.aws.ec2_vpc_subnet_info:
-    region: "{{ aws_region }}"
-    filters:
-      vpc-id: "{{ vpc_id }}"
-      "tag:{{ subnet_1_tag.split(':')[0] }}": "{{ subnet_1_tag.split(':')[1] }}"
-  register: subnet_1_lookup_result_tag
-  when: >
-    lookup_subnet_1 | default(false) and
-    subnet_1_tag != '' and
-    not (subnet_1_found_by_name | default(false))
-
-- name: Set subnet 1 ID from tag lookup
-  set_fact:
-    subnet_1_id: "{{ subnet_1_lookup_result_tag.subnets[0].id }}"
-  when: >
-    lookup_subnet_1 | default(false) and
-    subnet_1_lookup_result_tag.subnets is defined and
-    subnet_1_lookup_result_tag.subnets | length > 0 and
-    not (subnet_1_found_by_name | default(false))
-
-- name: Look up subnet 2 ID by name
-  amazon.aws.ec2_vpc_subnet_info:
-    region: "{{ aws_region }}"
-    filters:
-      vpc-id: "{{ vpc_id }}"
-      "tag:Name": "{{ subnet_2_name }}"
-  register: subnet_2_lookup_result_name
-  when: lookup_subnet_2 | default(false) and subnet_2_name != ''
-
-- name: Check if subnet 2 name lookup found a subnet
-  set_fact:
-    subnet_2_found_by_name: "{{ subnet_2_lookup_result_name.subnets | length > 0 }}"
-  when: lookup_subnet_2 | default(false) and subnet_2_name != '' and subnet_2_lookup_result_name is defined
-
-- name: Set subnet 2 ID from name lookup
-  set_fact:
-    subnet_2_id: "{{ subnet_2_lookup_result_name.subnets[0].id }}"
-  when: lookup_subnet_2 | default(false) and subnet_2_found_by_name | default(false)
-
-- name: Look up subnet 2 ID by tag (fallback if name lookup failed)
-  amazon.aws.ec2_vpc_subnet_info:
-    region: "{{ aws_region }}"
-    filters:
-      vpc-id: "{{ vpc_id }}"
-      "tag:{{ subnet_2_tag.split(':')[0] }}": "{{ subnet_2_tag.split(':')[1] }}"
-  register: subnet_2_lookup_result_tag
-  when: >
-    lookup_subnet_2 | default(false) and
-    subnet_2_tag != '' and
-    not (subnet_2_found_by_name | default(false))
-
-- name: Set subnet 2 ID from tag lookup
-  set_fact:
-    subnet_2_id: "{{ subnet_2_lookup_result_tag.subnets[0].id }}"
-  when: >
-    lookup_subnet_2 | default(false) and
-    subnet_2_lookup_result_tag.subnets is defined and
-    subnet_2_lookup_result_tag.subnets | length > 0 and
-    not (subnet_2_found_by_name | default(false))
+      "tag:sigs.k8s.io/cluster-api-provider-aws/role": private
+  register: subnets_private_lookup
+  when: lookup_subnet_1 | default(false)
 
 - name: Debug subnet lookup results
   debug:
