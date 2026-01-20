@@ -9,20 +9,18 @@ secretStoreRef:
 
 # Trident Protect AppVault configuration
 tridentProtect:
-  # AppVault for S3-compatible storage (FSx ONTAP S3 or AWS S3)
+  # AppVault for S3-compatible storage (AWS S3, ONTAP-S3, etc.)
   appVault:
     enabled: true
-    name: ontap-s3-appvault
+    name: aws-s3-appvault
     # Type: AWS, Azure, GCP, S3, ONTAP-S3, StorageGRID-S3, Generic-S3
-    providerType: ONTAP-S3
+    providerType: AWS
     # Credentials from Vault
     credentials:
-      key: secret/data/global/trident-protect-s3
+      # Vault path (without secret/data prefix - that's added by the ClusterSecretStore)
+      vaultPath: secret/data/hub/aws
       secretName: trident-protect-s3-creds
     # S3 configuration
     s3:
-      endpoint: ""  # e.g., https://svm-xxx.fs-xxx.fsx.us-west-1.amazonaws.com
-      bucketName: ""  # e.g., trident-protect-bucket
+      bucketName: ""  # e.g., trident-protect-backups
       region: us-west-1
-      secure: true
-      skipCertValidation: false

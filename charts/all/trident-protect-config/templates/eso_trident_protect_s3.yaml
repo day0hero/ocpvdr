@@ -24,11 +24,11 @@ spec:
   data:
     - secretKey: accessKeyID
       remoteRef:
-        key: {{ .credentials.key }}
+        key: {{ .credentials.vaultPath }}
         property: accessKeyID
     - secretKey: secretAccessKey
       remoteRef:
-        key: {{ .credentials.key }}
+        key: {{ .credentials.vaultPath }}
         property: secretAccessKey
 {{- end }}
 {{- end }}

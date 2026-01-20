@@ -10,14 +10,26 @@ spec:
   providerType: {{ .Values.tridentProtect.appVault.providerType }}
   providerConfig:
 {{- with .Values.tridentProtect.appVault.s3 }}
+  {{- if eq $.Values.tridentProtect.appVault.providerType "AWS" }}
+    aws:
+      bucketName: {{ .bucketName | quote }}
+      region: {{ .region | quote }}
+  {{- else }}
     s3:
+      {{- if .endpoint }}
       endpoint: {{ .endpoint | quote }}
+      {{- end }}
       bucketName: {{ .bucketName | quote }}
       {{- if .region }}
       region: {{ .region | quote }}
       {{- end }}
-      secure: {{ .secure | default true }}
-      skipCertValidation: {{ .skipCertValidation | default false }}
+      {{- if hasKey . "secure" }}
+      secure: {{ .secure }}
+      {{- end }}
+      {{- if hasKey . "skipCertValidation" }}
+      skipCertValidation: {{ .skipCertValidation }}
+      {{- end }}
+  {{- end }}
 {{- end }}
   providerCredentials:
     accessKeyID:
