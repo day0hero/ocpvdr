@@ -99,7 +99,7 @@
         from_port: 2049
         to_port: 2049
       # iSCSI
-      - proto: udp
+      - proto: tcp
         cidr_ip: "{{ allowed_cidr }}"
         from_port: 3260
         to_port: 3260
