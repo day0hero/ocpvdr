@@ -29,8 +29,7 @@ route_table_names:
 allowed_cidr: "10.0.0.0/16"  # CIDR range allowed to connect to FSx
 
 # FSx ONTAP Configuration
-# file_system_name defaults to "{cluster_name}-fsx-ontap" if not set
-# file_system_name: ""  # Uncomment and set to override the default
+file_system_name: "my-fsx-ontap"
 storage_capacity: 1024  # GiB (minimum 1024, maximum 196608 for SSD)
 throughput_capacity: 1024  # MBps (valid values: 512, 1024, 2048)
 storage_type: "SSD"  # SSD or HDD

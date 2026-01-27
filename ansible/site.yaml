@@ -291,13 +291,6 @@
         - not (delete_resources | default(false))
         - (svm_admin_password is not defined or svm_admin_password == '' or svm_admin_password == 'null' or svm_admin_password == None)
 
-    - name: Set file_system_name from cluster_name if not provided
-      set_fact:
-        file_system_name: "{{ cluster_name }}-fsx-ontap"
-      when: 
-        - not (delete_resources | default(false))
-        - file_system_name is not defined or file_system_name == ''
-
     - name: Create FSx ONTAP filesystem
       include_role:
         name: fsx_ontap
