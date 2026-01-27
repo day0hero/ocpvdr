@@ -122,7 +122,7 @@ clusterGroup:
         kind: ValidatingWebhookConfiguration
         name: trident-protect-validating-webhook-configurations
         jqPathExpressions:
-        - '.webhooks[*].clientConfig.caBundle'
+        - '.webhooks[].clientConfig.caBundle'
     protect-config:
       name: trident-protect-config
       namespace: trident-protect
