@@ -115,10 +115,12 @@ clusterGroup:
       ignoreDifferences:
       - group: ""
         kind: Secret
+        name: tp-webhook-tls
         jqPathExpressions:
         - .data
       - group: admissionregistration.k8s.io
         kind: ValidatingWebhookConfiguration
+        name: trident-protect-validating-webhook-configurations
         jqPathExpressions:
         - .webhooks[*].clientConfig.caBundle
     protect-config:
