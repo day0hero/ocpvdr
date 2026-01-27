@@ -1,0 +1,48 @@
+---
+# Defaults for fsx_ontap_terraform role
+
+# Terraform Configuration
+terraform_dir: "{{ playbook_dir }}/../terraform/fsx-ontap"
+terraform_state_bucket: ""
+terraform_state_key: "fsx-ontap/terraform.tfstate"
+terraform_state_dynamodb_table: "terraform-state-lock"
+
+# Container Configuration
+use_container: true
+container_runtime: "podman"  # podman or docker
+terraform_image: "localhost/terraform-ubi-minimal:1.14.3"
+
+# Network Configuration (will be auto-detected from cluster if not provided)
+vpc_id: ""
+subnet_ids: []
+route_table_ids: []
+allowed_cidr: "10.0.0.0/16"
+
+# FSx ONTAP Configuration
+# file_system_name is derived from cluster_name if not set
+# (do not set a default here - let the playbook compute it from cluster_name)
+storage_capacity: 1024
+throughput_capacity: 1024
+storage_type: "SSD"
+deployment_type: "MULTI_AZ_1"
+weekly_maintenance_time: "7:01:00"
+automatic_backup_retention_days: 3
+daily_automatic_backup_start_time: "01:00"
+
+# SVM Configuration
+svm_name: "SVM1"
+root_volume_security_style: "UNIX"
+
+# Secrets Manager
+create_secrets: true
+
+# Tags
+tags:
+  Environment: "production"
+  ManagedBy: "Terraform"
+
+# Operation mode
+terraform_destroy: false
+
+# Update values-trident.yaml with SVM info
+update_trident_values: true

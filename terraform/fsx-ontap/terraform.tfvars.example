@@ -1,0 +1,41 @@
+# -----------------------------------------------------------------------------
+# Example Terraform Variables File
+# -----------------------------------------------------------------------------
+# Copy this file to terraform.tfvars and update with your values.
+# Alternatively, these values are set automatically by the Ansible wrapper.
+# -----------------------------------------------------------------------------
+
+# AWS Configuration
+aws_region = "us-east-1"
+
+# Network Configuration (auto-detected from cluster by Ansible)
+vpc_id          = "vpc-xxxxxxxxxxxxxxxxx"
+subnet_ids      = ["subnet-xxxxxxxxxxxxxxxxx", "subnet-yyyyyyyyyyyyyyyyy"]
+route_table_ids = ["rtb-xxxxxxxxxxxxxxxxx"]
+allowed_cidr    = "10.0.0.0/16"
+
+# FSx ONTAP Configuration
+# file_system_name defaults to "{cluster_name}-fsx-ontap" when using Ansible wrapper
+file_system_name    = "my-cluster-fsx-ontap"
+storage_capacity    = 1024
+throughput_capacity = 1024
+storage_type        = "SSD"
+deployment_type     = "MULTI_AZ_1"
+
+# Passwords (use environment variables or -var flag for security)
+# fsx_admin_password = "ChangeMe123!"
+# svm_admin_password = "ChangeMe123!"
+
+# SVM Configuration
+svm_name                   = "SVM1"
+root_volume_security_style = "UNIX"
+
+# Secrets Manager
+create_secrets = true
+
+# Tags
+tags = {
+  Environment = "production"
+  ManagedBy   = "Terraform"
+  Project     = "ocpvdr"
+}

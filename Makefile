@@ -60,3 +60,169 @@ destroy-fsx: ## Delete FSx ONTAP resources (region auto-detected from cluster, o
 	@echo "Auto-detected REGION: $(REGION)"
 	@echo "Auto-detected CLUSTER: $(CLUSTER)"
 	ansible-playbook $(EXTRA_PLAYBOOK_OPTS) ansible/site.yaml -e @ansible/fsx-ontap-vars.yml -e aws_region=$(REGION) -e cluster_name=$(CLUSTER) -e delete_resources=true
+
+##@ Trident Protect Tasks
+
+# S3 bucket configuration - read from values-trident.yaml if not overridden
+BUCKET_NAME ?= $(shell yq '.tridentProtect.appVault.s3.bucketName' values-trident.yaml 2>/dev/null)
+POLICY_NAME ?= trident-protect-s3-policy
+
+.PHONY: setup-trident-protect-s3
+setup-trident-protect-s3: ## Create S3 bucket and IAM policy for Trident Protect AppVault
+	@if [ -z "$(REGION)" ]; then \
+		echo "Error: Could not detect REGION from cluster. Ensure KUBECONFIG is set or oc context is configured."; \
+		echo "You can override by passing REGION=us-east-1"; \
+		exit 1; \
+	fi
+	@if [ -z "$(BUCKET_NAME)" ] || [ "$(BUCKET_NAME)" = "null" ]; then \
+		echo "Error: Could not read bucket name from values-trident.yaml (tridentProtect.appVault.s3.bucketName)"; \
+		echo "You can override by passing BUCKET_NAME=my-bucket"; \
+		exit 1; \
+	fi
+	REGION=$(REGION) BUCKET_NAME=$(BUCKET_NAME) POLICY_NAME=$(POLICY_NAME) \
+		./scripts/setup-trident-protect-s3.sh
+
+.PHONY: destroy-trident-protect-s3
+destroy-trident-protect-s3: ## Delete S3 bucket and IAM resources for Trident Protect
+	@if [ -z "$(REGION)" ]; then \
+		echo "Error: Could not detect REGION from cluster. Ensure KUBECONFIG is set or oc context is configured."; \
+		echo "You can override by passing REGION=us-east-1"; \
+		exit 1; \
+	fi
+	@if [ -z "$(BUCKET_NAME)" ] || [ "$(BUCKET_NAME)" = "null" ]; then \
+		echo "Error: Could not read bucket name from values-trident.yaml (tridentProtect.appVault.s3.bucketName)"; \
+		echo "You can override by passing BUCKET_NAME=my-bucket"; \
+		exit 1; \
+	fi
+	REGION=$(REGION) BUCKET_NAME=$(BUCKET_NAME) POLICY_NAME=$(POLICY_NAME) \
+		./scripts/setup-trident-protect-s3.sh --delete
+
+##@ FSx Terraform Tasks
+
+# Terraform state configuration - read from values-trident.yaml if not overridden
+TERRAFORM_STATE_BUCKET ?= $(shell yq '.terraform.state.bucket // ""' values-trident.yaml 2>/dev/null)
+TERRAFORM_STATE_KEY ?= fsx-ontap/terraform.tfstate
+TERRAFORM_STATE_DYNAMODB_TABLE ?= terraform-state-lock
+
+# Terraform container configuration
+TERRAFORM_IMAGE ?= localhost/terraform-ubi-minimal:1.14.3
+CONTAINER_RUNTIME ?= podman
+USE_CONTAINER ?= true
+
+.PHONY: setup-terraform-state
+setup-terraform-state: ## Create S3 bucket and DynamoDB table for Terraform state storage
+	@if [ -z "$(REGION)" ]; then \
+		echo "Error: Could not detect REGION from cluster. Ensure KUBECONFIG is set or oc context is configured."; \
+		echo "You can override by passing REGION=us-east-1"; \
+		exit 1; \
+	fi
+	REGION=$(REGION) TABLE_NAME=$(TERRAFORM_STATE_DYNAMODB_TABLE) \
+		./scripts/setup-terraform-state-s3.sh
+
+.PHONY: destroy-terraform-state
+destroy-terraform-state: ## Delete S3 bucket and DynamoDB table for Terraform state
+	@if [ -z "$(REGION)" ]; then \
+		echo "Error: Could not detect REGION from cluster. Ensure KUBECONFIG is set or oc context is configured."; \
+		echo "You can override by passing REGION=us-east-1"; \
+		exit 1; \
+	fi
+	REGION=$(REGION) TABLE_NAME=$(TERRAFORM_STATE_DYNAMODB_TABLE) \
+		./scripts/setup-terraform-state-s3.sh --delete
+
+.PHONY: build-fsx-terraform
+build-fsx-terraform: ## Create FSx ONTAP using Terraform (runs in container by default)
+	@if [ -z "$(REGION)" ]; then \
+		echo "Error: Could not detect REGION from cluster. Ensure KUBECONFIG is set or oc context is configured."; \
+		echo "You can override by passing REGION=us-east-1"; \
+		exit 1; \
+	fi
+	@if [ -z "$(CLUSTER)" ]; then \
+		echo "Error: Could not detect CLUSTER from cluster infrastructure."; \
+		echo "You can override by passing CLUSTER=my-cluster"; \
+		exit 1; \
+	fi
+	@echo "Auto-detected REGION: $(REGION)"
+	@echo "Auto-detected CLUSTER: $(CLUSTER)"
+	@echo "Using container: $(USE_CONTAINER) (image: $(TERRAFORM_IMAGE))"
+	@if [ -n "$(TERRAFORM_STATE_BUCKET)" ]; then \
+		echo "Using S3 backend: $(TERRAFORM_STATE_BUCKET)"; \
+		ansible-playbook $(EXTRA_PLAYBOOK_OPTS) ansible/site-terraform.yaml \
+			-e @ansible/fsx-ontap-vars.yml \
+			-e aws_region=$(REGION) \
+			-e cluster_name=$(CLUSTER) \
+			-e use_container=$(USE_CONTAINER) \
+			-e container_runtime=$(CONTAINER_RUNTIME) \
+			-e terraform_image=$(TERRAFORM_IMAGE) \
+			-e terraform_state_bucket=$(TERRAFORM_STATE_BUCKET) \
+			-e terraform_state_key=$(TERRAFORM_STATE_KEY) \
+			-e terraform_state_dynamodb_table=$(TERRAFORM_STATE_DYNAMODB_TABLE); \
+	else \
+		echo "Using local Terraform state (set TERRAFORM_STATE_BUCKET for S3 backend)"; \
+		ansible-playbook $(EXTRA_PLAYBOOK_OPTS) ansible/site-terraform.yaml \
+			-e @ansible/fsx-ontap-vars.yml \
+			-e aws_region=$(REGION) \
+			-e cluster_name=$(CLUSTER) \
+			-e use_container=$(USE_CONTAINER) \
+			-e container_runtime=$(CONTAINER_RUNTIME) \
+			-e terraform_image=$(TERRAFORM_IMAGE); \
+	fi
+
+.PHONY: destroy-fsx-terraform
+destroy-fsx-terraform: ## Destroy FSx ONTAP resources using Terraform
+	@if [ -z "$(REGION)" ]; then \
+		echo "Error: Could not detect REGION from cluster. Ensure KUBECONFIG is set or oc context is configured."; \
+		echo "You can override by passing REGION=us-east-1"; \
+		exit 1; \
+	fi
+	@if [ -z "$(CLUSTER)" ]; then \
+		echo "Error: Could not detect CLUSTER from cluster infrastructure."; \
+		echo "You can override by passing CLUSTER=my-cluster"; \
+		exit 1; \
+	fi
+	@echo "Auto-detected REGION: $(REGION)"
+	@echo "Auto-detected CLUSTER: $(CLUSTER)"
+	@echo "Using container: $(USE_CONTAINER) (image: $(TERRAFORM_IMAGE))"
+	@if [ -n "$(TERRAFORM_STATE_BUCKET)" ]; then \
+		echo "Using S3 backend: $(TERRAFORM_STATE_BUCKET)"; \
+		ansible-playbook $(EXTRA_PLAYBOOK_OPTS) ansible/site-terraform.yaml \
+			-e @ansible/fsx-ontap-vars.yml \
+			-e aws_region=$(REGION) \
+			-e cluster_name=$(CLUSTER) \
+			-e terraform_destroy=true \
+			-e use_container=$(USE_CONTAINER) \
+			-e container_runtime=$(CONTAINER_RUNTIME) \
+			-e terraform_image=$(TERRAFORM_IMAGE) \
+			-e terraform_state_bucket=$(TERRAFORM_STATE_BUCKET) \
+			-e terraform_state_key=$(TERRAFORM_STATE_KEY) \
+			-e terraform_state_dynamodb_table=$(TERRAFORM_STATE_DYNAMODB_TABLE); \
+	else \
+		echo "Using local Terraform state"; \
+		ansible-playbook $(EXTRA_PLAYBOOK_OPTS) ansible/site-terraform.yaml \
+			-e @ansible/fsx-ontap-vars.yml \
+			-e aws_region=$(REGION) \
+			-e cluster_name=$(CLUSTER) \
+			-e terraform_destroy=true \
+			-e use_container=$(USE_CONTAINER) \
+			-e container_runtime=$(CONTAINER_RUNTIME) \
+			-e terraform_image=$(TERRAFORM_IMAGE); \
+	fi
+
+.PHONY: plan-fsx-terraform
+plan-fsx-terraform: ## Show Terraform plan for FSx ONTAP (dry-run)
+	@if [ -z "$(REGION)" ]; then \
+		echo "Error: Could not detect REGION from cluster."; \
+		exit 1; \
+	fi
+	@echo "Running Terraform plan..."
+	@if [ "$(USE_CONTAINER)" = "true" ]; then \
+		$(CONTAINER_RUNTIME) run --rm \
+			-v $(PWD)/terraform/fsx-ontap:/workspace:Z \
+			-v $(HOME)/.aws:/root/.aws:ro \
+			-w /workspace \
+			-e AWS_REGION=$(REGION) \
+			-e AWS_DEFAULT_REGION=$(REGION) \
+			$(TERRAFORM_IMAGE) \
+			sh -c "terraform init -upgrade && terraform plan"; \
+	else \
+		cd terraform/fsx-ontap && terraform init -upgrade && terraform plan; \
+	fi

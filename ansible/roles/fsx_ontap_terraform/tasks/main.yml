@@ -1,0 +1,299 @@
+---
+# Main tasks for fsx_ontap_terraform role
+# This role wraps Terraform to create/manage FSx ONTAP resources
+
+- name: Display role configuration
+  debug:
+    msg:
+      - "=========================================="
+      - "FSx ONTAP Terraform Role"
+      - "=========================================="
+      - "Terraform Directory: {{ terraform_dir }}"
+      - "State Bucket: {{ terraform_state_bucket | default('local state') }}"
+      - "Region: {{ aws_region }}"
+      - "Operation: {{ 'DESTROY' if (terraform_destroy | default(false)) else 'APPLY' }}"
+      - "Use Container: {{ use_container | default(true) }}"
+      - "Container Image: {{ terraform_image if (use_container | default(true)) else 'N/A' }}"
+      - "=========================================="
+
+# Container-based Terraform execution
+- name: Check if container runtime is available
+  ansible.builtin.command: "{{ container_runtime }} --version"
+  register: container_runtime_check
+  changed_when: false
+  failed_when: false
+  when: use_container | default(true)
+
+- name: Fail if container runtime not available
+  fail:
+    msg: |
+      Container runtime '{{ container_runtime }}' is not installed or not available.
+      Please install {{ container_runtime }} or set use_container=false to use local Terraform.
+  when: 
+    - use_container | default(true)
+    - container_runtime_check.rc != 0
+
+# Get AWS credentials from boto3 session (works with SSO, profiles, env vars, etc.)
+- name: Get AWS credentials from boto3 session
+  ansible.builtin.shell: |
+    python3 -c "
+    import json, boto3
+    creds = boto3.Session().get_credentials().get_frozen_credentials()
+    print(json.dumps({'ak': creds.access_key, 'sk': creds.secret_key, 'st': creds.token or ''}))
+    "
+  register: boto3_creds_result
+  changed_when: false
+  when: use_container | default(true)
+
+- name: Set terraform command prefix for container
+  set_fact:
+    terraform_cmd_prefix: >-
+      {{ container_runtime }} run --rm
+      -v {{ terraform_dir }}:/workspace:Z
+      -w /workspace
+      -e AWS_REGION={{ aws_region }}
+      -e AWS_DEFAULT_REGION={{ aws_region }}
+      -e AWS_ACCESS_KEY_ID={{ (boto3_creds_result.stdout | from_json).ak }}
+      -e AWS_SECRET_ACCESS_KEY={{ (boto3_creds_result.stdout | from_json).sk }}
+      {% if (boto3_creds_result.stdout | from_json).st %}-e AWS_SESSION_TOKEN={{ (boto3_creds_result.stdout | from_json).st }}{% endif %}
+      {{ terraform_image }}
+  when: use_container | default(true)
+
+- name: Set terraform command prefix for local execution
+  set_fact:
+    terraform_cmd_prefix: ""
+  when: not (use_container | default(true))
+
+- name: Display container command (debug)
+  debug:
+    msg: "Terraform command prefix: {{ terraform_cmd_prefix }}"
+  when: use_container | default(true)
+
+# Local Terraform check (only when not using container)
+- name: Check if Terraform is installed locally
+  ansible.builtin.command: terraform version
+  register: terraform_version
+  changed_when: false
+  failed_when: false
+  when: not (use_container | default(true))
+
+- name: Fail if Terraform is not installed locally
+  fail:
+    msg: |
+      Terraform is not installed. Please install Terraform first:
+        brew install terraform   # macOS
+        dnf install terraform    # Fedora/RHEL
+        apt install terraform    # Debian/Ubuntu
+      Or download from: https://www.terraform.io/downloads
+      Or use container mode: -e use_container=true
+  when: 
+    - not (use_container | default(true))
+    - terraform_version.rc != 0
+
+- name: Get Terraform version
+  ansible.builtin.shell: "{{ terraform_cmd_prefix }} terraform version"
+  args:
+    chdir: "{{ terraform_dir }}"
+  register: terraform_version_output
+  changed_when: false
+
+- name: Display Terraform version
+  debug:
+    msg: "Terraform version: {{ terraform_version_output.stdout_lines[0] }}"
+
+- name: Check if S3 backend bucket is specified
+  set_fact:
+    use_s3_backend: "{{ terraform_state_bucket | default('') | length > 0 }}"
+
+- name: Generate backend.tf for S3 state storage
+  template:
+    src: backend.tf.j2
+    dest: "{{ terraform_dir }}/backend.tf"
+    mode: '0644'
+  when: use_s3_backend
+
+- name: Remove backend.tf if not using S3 backend
+  file:
+    path: "{{ terraform_dir }}/backend.tf"
+    state: absent
+  when: not use_s3_backend
+
+# Ensure file_system_name is set from cluster_name if not provided (skip for destroy)
+- name: Debug cluster_name and file_system_name values
+  debug:
+    msg:
+      - "cluster_name defined: {{ cluster_name is defined }}"
+      - "cluster_name value: '{{ cluster_name | default('UNDEFINED') }}'"
+      - "file_system_name defined: {{ file_system_name is defined }}"
+      - "file_system_name value: '{{ file_system_name | default('UNDEFINED') }}'"
+  when: not (terraform_destroy | default(false))
+
+- name: Set file_system_name from cluster_name if not provided
+  set_fact:
+    file_system_name: "{{ cluster_name }}-fsx-ontap"
+  when: 
+    - not (terraform_destroy | default(false))
+    - cluster_name is defined
+    - cluster_name | default('') | length > 0
+    - file_system_name is not defined or file_system_name | default('') == ''
+
+- name: Fail if file_system_name cannot be determined
+  fail:
+    msg: "file_system_name is required but not set and cluster_name is not available to derive it"
+  when:
+    - not (terraform_destroy | default(false))
+    - file_system_name is not defined or file_system_name | default('') == ''
+
+- name: Generate terraform.tfvars from Ansible variables
+  template:
+    src: terraform.tfvars.j2
+    dest: "{{ terraform_dir }}/terraform.tfvars"
+    mode: '0600'
+  when: not (terraform_destroy | default(false))
+
+- name: Initialize Terraform
+  ansible.builtin.shell: "{{ terraform_cmd_prefix }} terraform init -upgrade -reconfigure -no-color"
+  args:
+    chdir: "{{ terraform_dir }}"
+  register: terraform_init
+  changed_when: "'Terraform has been successfully initialized' in terraform_init.stdout"
+
+- name: Display Terraform init output
+  debug:
+    var: terraform_init.stdout_lines
+  when: terraform_init.stdout_lines | length > 0
+
+- name: Terraform plan
+  ansible.builtin.shell: "{{ terraform_cmd_prefix }} terraform plan -out=tfplan -input=false -no-color"
+  args:
+    chdir: "{{ terraform_dir }}"
+  register: terraform_plan
+  when: not (terraform_destroy | default(false))
+
+- name: Display Terraform plan summary
+  debug:
+    msg: "{{ terraform_plan.stdout_lines[-10:] }}"
+  when: 
+    - not (terraform_destroy | default(false))
+    - terraform_plan.stdout_lines | length > 0
+
+- name: Terraform apply
+  ansible.builtin.shell: "{{ terraform_cmd_prefix }} terraform apply -auto-approve -no-color tfplan"
+  args:
+    chdir: "{{ terraform_dir }}"
+  register: terraform_apply
+  when: not (terraform_destroy | default(false))
+
+- name: Display Terraform apply output
+  debug:
+    var: terraform_apply.stdout_lines
+  when: 
+    - not (terraform_destroy | default(false))
+    - terraform_apply.stdout_lines is defined
+
+- name: Get Terraform outputs
+  ansible.builtin.shell: "{{ terraform_cmd_prefix }} terraform output -json -no-color"
+  args:
+    chdir: "{{ terraform_dir }}"
+  register: terraform_outputs_raw
+  when: not (terraform_destroy | default(false))
+  changed_when: false
+
+- name: Parse Terraform outputs
+  set_fact:
+    terraform_outputs: "{{ terraform_outputs_raw.stdout | from_json }}"
+  when: 
+    - not (terraform_destroy | default(false))
+    - terraform_outputs_raw.stdout is defined
+
+- name: Set facts from Terraform outputs
+  set_fact:
+    fsx_filesystem_id: "{{ terraform_outputs.file_system_id.value }}"
+    fsx_dns_name: "{{ terraform_outputs.file_system_dns_name.value }}"
+    svm_id: "{{ terraform_outputs.svm_id.value }}"
+    svm_name_result: "{{ terraform_outputs.svm_name.value }}"
+    svm_mgmt_dns_name: "{{ terraform_outputs.svm_management_endpoint_dns_name.value | default('') }}"
+    security_group_id: "{{ terraform_outputs.security_group_id.value }}"
+    fsx_secret_arn: "{{ terraform_outputs.fsx_admin_secret_arn.value | default('') }}"
+    svm_secret_arn: "{{ terraform_outputs.svm_admin_secret_arn.value | default('') }}"
+  when: 
+    - not (terraform_destroy | default(false))
+    - terraform_outputs is defined
+
+- name: Update tridentFSX.iscsi.mgmtLIF in values-trident.yaml
+  ansible.builtin.replace:
+    path: "{{ playbook_dir }}/../values-trident.yaml"
+    regexp: '^(\s{4})mgmtLIF:\s+.*'
+    replace: '\1mgmtLIF: {{ svm_mgmt_dns_name }}'
+  when: 
+    - not (terraform_destroy | default(false))
+    - update_trident_values | default(true)
+    - svm_mgmt_dns_name is defined
+    - svm_mgmt_dns_name != ""
+
+- name: Update tridentFSX.iscsi.svm in values-trident.yaml
+  ansible.builtin.replace:
+    path: "{{ playbook_dir }}/../values-trident.yaml"
+    regexp: '^(\s{4})svm:\s+.*'
+    replace: '\1svm: {{ svm_name_result }}'
+  when:
+    - not (terraform_destroy | default(false))
+    - update_trident_values | default(true)
+    - svm_name_result is defined
+    - svm_name_result != ""
+
+- name: Display Output Summary
+  debug:
+    msg:
+      - "=========================================="
+      - "FSx for ONTAP Deployment Complete"
+      - "=========================================="
+      - "File System ID: {{ fsx_filesystem_id }}"
+      - "File System DNS Name: {{ fsx_dns_name }}"
+      - "SVM ID: {{ svm_id }}"
+      - "SVM Name: {{ svm_name_result }}"
+      - "SVM Management DNS: {{ svm_mgmt_dns_name | default('N/A') }}"
+      - "Security Group ID: {{ security_group_id }}"
+      - "FSx Admin Secret ARN: {{ fsx_secret_arn | default('N/A') }}"
+      - "SVM Admin Secret ARN: {{ svm_secret_arn | default('N/A') }}"
+      - "=========================================="
+  when: 
+    - not (terraform_destroy | default(false))
+    - fsx_filesystem_id is defined
+
+# Destroy tasks
+- name: Terraform destroy plan
+  ansible.builtin.shell: "{{ terraform_cmd_prefix }} terraform plan -destroy -out=tfplan-destroy -input=false -no-color"
+  args:
+    chdir: "{{ terraform_dir }}"
+  register: terraform_destroy_plan
+  when: terraform_destroy | default(false)
+
+- name: Display Terraform destroy plan
+  debug:
+    msg: "{{ terraform_destroy_plan.stdout_lines[-10:] }}"
+  when: 
+    - terraform_destroy | default(false)
+    - terraform_destroy_plan.stdout_lines is defined
+
+- name: Terraform destroy
+  ansible.builtin.shell: "{{ terraform_cmd_prefix }} terraform apply -auto-approve -no-color tfplan-destroy"
+  args:
+    chdir: "{{ terraform_dir }}"
+  register: terraform_destroy_result
+  when: terraform_destroy | default(false)
+
+- name: Display Terraform destroy output
+  debug:
+    var: terraform_destroy_result.stdout_lines
+  when: 
+    - terraform_destroy | default(false)
+    - terraform_destroy_result.stdout_lines is defined
+
+- name: Display destroy completion message
+  debug:
+    msg:
+      - "=========================================="
+      - "FSx for ONTAP Resources Destroyed"
+      - "=========================================="
+  when: terraform_destroy | default(false)
