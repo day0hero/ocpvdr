@@ -64,11 +64,6 @@
     terraform_cmd_prefix: ""
   when: not (use_container | default(true))
 
-- name: Display container command (debug)
-  debug:
-    msg: "Terraform command prefix: {{ terraform_cmd_prefix }}"
-  when: use_container | default(true)
-
 # Local Terraform check (only when not using container)
 - name: Check if Terraform is installed locally
   ansible.builtin.command: terraform version
@@ -119,15 +114,6 @@
   when: not use_s3_backend
 
 # Ensure file_system_name is set from cluster_name if not provided (skip for destroy)
-- name: Debug cluster_name and file_system_name values
-  debug:
-    msg:
-      - "cluster_name defined: {{ cluster_name is defined }}"
-      - "cluster_name value: '{{ cluster_name | default('UNDEFINED') }}'"
-      - "file_system_name defined: {{ file_system_name is defined }}"
-      - "file_system_name value: '{{ file_system_name | default('UNDEFINED') }}'"
-  when: not (terraform_destroy | default(false))
-
 - name: Set file_system_name from cluster_name if not provided
   set_fact:
     file_system_name: "{{ cluster_name }}-fsx-ontap"
@@ -158,11 +144,6 @@
   register: terraform_init
   changed_when: "'Terraform has been successfully initialized' in terraform_init.stdout"
 
-- name: Display Terraform init output
-  debug:
-    var: terraform_init.stdout_lines
-  when: terraform_init.stdout_lines | length > 0
-
 - name: Terraform plan
   ansible.builtin.shell: "{{ terraform_cmd_prefix }} terraform plan -out=tfplan -input=false -no-color"
   args:
@@ -170,26 +151,12 @@
   register: terraform_plan
   when: not (terraform_destroy | default(false))
 
-- name: Display Terraform plan summary
-  debug:
-    msg: "{{ terraform_plan.stdout_lines[-10:] }}"
-  when: 
-    - not (terraform_destroy | default(false))
-    - terraform_plan.stdout_lines | length > 0
-
 - name: Terraform apply
   ansible.builtin.shell: "{{ terraform_cmd_prefix }} terraform apply -auto-approve -no-color tfplan"
   args:
     chdir: "{{ terraform_dir }}"
   register: terraform_apply
   when: not (terraform_destroy | default(false))
-
-- name: Display Terraform apply output
-  debug:
-    var: terraform_apply.stdout_lines
-  when: 
-    - not (terraform_destroy | default(false))
-    - terraform_apply.stdout_lines is defined
 
 - name: Get Terraform outputs
   ansible.builtin.shell: "{{ terraform_cmd_prefix }} terraform output -json -no-color"
@@ -269,26 +236,12 @@
   register: terraform_destroy_plan
   when: terraform_destroy | default(false)
 
-- name: Display Terraform destroy plan
-  debug:
-    msg: "{{ terraform_destroy_plan.stdout_lines[-10:] }}"
-  when: 
-    - terraform_destroy | default(false)
-    - terraform_destroy_plan.stdout_lines is defined
-
 - name: Terraform destroy
   ansible.builtin.shell: "{{ terraform_cmd_prefix }} terraform apply -auto-approve -no-color tfplan-destroy"
   args:
     chdir: "{{ terraform_dir }}"
   register: terraform_destroy_result
   when: terraform_destroy | default(false)
-
-- name: Display Terraform destroy output
-  debug:
-    var: terraform_destroy_result.stdout_lines
-  when: 
-    - terraform_destroy | default(false)
-    - terraform_destroy_result.stdout_lines is defined
 
 - name: Display destroy completion message
   debug:

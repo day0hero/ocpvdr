@@ -116,7 +116,7 @@ setup-terraform-state: ## Create S3 bucket and DynamoDB table for Terraform stat
 		echo "You can override by passing REGION=us-east-1"; \
 		exit 1; \
 	fi
-	REGION=$(REGION) TABLE_NAME=$(TERRAFORM_STATE_DYNAMODB_TABLE) \
+	REGION=$(REGION) BUCKET_NAME=$(TERRAFORM_STATE_BUCKET) TABLE_NAME=$(TERRAFORM_STATE_DYNAMODB_TABLE) \
 		./scripts/setup-terraform-state-s3.sh
 
 .PHONY: destroy-terraform-state
@@ -126,7 +126,7 @@ destroy-terraform-state: ## Delete S3 bucket and DynamoDB table for Terraform st
 		echo "You can override by passing REGION=us-east-1"; \
 		exit 1; \
 	fi
-	REGION=$(REGION) TABLE_NAME=$(TERRAFORM_STATE_DYNAMODB_TABLE) \
+	REGION=$(REGION) BUCKET_NAME=$(TERRAFORM_STATE_BUCKET) TABLE_NAME=$(TERRAFORM_STATE_DYNAMODB_TABLE) \
 		./scripts/setup-terraform-state-s3.sh --delete
 
 .PHONY: build-fsx-terraform

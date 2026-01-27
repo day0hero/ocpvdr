@@ -7,3 +7,15 @@ pattern-vault.init
 vault.init
 super-linter.log
 common/pattern-vault.init
+
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/terraform.tfvars
+**/backend.tf
+**/*.tfplan
+**/tfplan
+**/tfplan-destroy
+**/.terraform.tfstate.lock.info

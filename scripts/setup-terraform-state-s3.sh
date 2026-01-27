@@ -83,35 +83,32 @@ delete_resources() {
 
     # Delete DynamoDB table
     log_info "Deleting DynamoDB table $TABLE_NAME..."
-    if aws dynamodb describe-table --table-name "$TABLE_NAME" --region "$REGION" 2>/dev/null; then
-        aws dynamodb delete-table --table-name "$TABLE_NAME" --region "$REGION"
-        log_info "Waiting for table deletion..."
-        aws dynamodb wait table-not-exists --table-name "$TABLE_NAME" --region "$REGION" 2>/dev/null || true
+    if aws dynamodb describe-table --table-name "$TABLE_NAME" --region "$REGION" &>/dev/null; then
+        aws dynamodb delete-table --table-name "$TABLE_NAME" --region "$REGION" &>/dev/null
+        aws dynamodb wait table-not-exists --table-name "$TABLE_NAME" --region "$REGION" &>/dev/null || true
         log_info "Deleted DynamoDB table"
     else
         log_warn "DynamoDB table $TABLE_NAME does not exist"
     fi
 
     # Empty and delete S3 bucket
-    log_info "Emptying and deleting S3 bucket $BUCKET_NAME..."
-    if aws s3api head-bucket --bucket "$BUCKET_NAME" 2>/dev/null; then
-        # Delete all versions and delete markers
-        log_info "Removing all object versions..."
+    log_info "Deleting S3 bucket $BUCKET_NAME..."
+    if aws s3api head-bucket --bucket "$BUCKET_NAME" &>/dev/null; then
+        # Delete all versions and delete markers silently
         aws s3api list-object-versions --bucket "$BUCKET_NAME" --output json 2>/dev/null | \
-            jq -r '.Versions[]? | "\(.Key) \(.VersionId)"' | \
+            jq -r '.Versions[]? | "\(.Key) \(.VersionId)"' 2>/dev/null | \
             while read -r key version; do
-                aws s3api delete-object --bucket "$BUCKET_NAME" --key "$key" --version-id "$version" 2>/dev/null || true
+                aws s3api delete-object --bucket "$BUCKET_NAME" --key "$key" --version-id "$version" &>/dev/null || true
             done
 
-        log_info "Removing all delete markers..."
         aws s3api list-object-versions --bucket "$BUCKET_NAME" --output json 2>/dev/null | \
-            jq -r '.DeleteMarkers[]? | "\(.Key) \(.VersionId)"' | \
+            jq -r '.DeleteMarkers[]? | "\(.Key) \(.VersionId)"' 2>/dev/null | \
             while read -r key version; do
-                aws s3api delete-object --bucket "$BUCKET_NAME" --key "$key" --version-id "$version" 2>/dev/null || true
+                aws s3api delete-object --bucket "$BUCKET_NAME" --key "$key" --version-id "$version" &>/dev/null || true
             done
 
         # Delete bucket
-        aws s3 rb "s3://${BUCKET_NAME}" --region "$REGION" 2>/dev/null || true
+        aws s3 rb "s3://${BUCKET_NAME}" --region "$REGION" &>/dev/null || true
         log_info "Deleted S3 bucket"
     else
         log_warn "S3 bucket $BUCKET_NAME does not exist"
@@ -125,25 +122,23 @@ create_resources() {
 
     # Create S3 bucket
     log_info "Creating S3 bucket $BUCKET_NAME..."
-    if aws s3api head-bucket --bucket "$BUCKET_NAME" 2>/dev/null; then
+    if aws s3api head-bucket --bucket "$BUCKET_NAME" &>/dev/null; then
         log_warn "Bucket $BUCKET_NAME already exists"
     else
         if [[ "$REGION" == "us-east-1" ]]; then
-            aws s3api create-bucket --bucket "$BUCKET_NAME" --region "$REGION"
+            aws s3api create-bucket --bucket "$BUCKET_NAME" --region "$REGION" &>/dev/null
         else
             aws s3api create-bucket --bucket "$BUCKET_NAME" --region "$REGION" \
-                --create-bucket-configuration LocationConstraint="$REGION"
+                --create-bucket-configuration LocationConstraint="$REGION" &>/dev/null
         fi
-        log_info "Created bucket $BUCKET_NAME"
+        log_info "Created bucket"
     fi
 
-    # Enable versioning (required for state recovery)
-    log_info "Enabling versioning on bucket..."
+    # Configure bucket settings
+    log_info "Configuring bucket settings..."
     aws s3api put-bucket-versioning --bucket "$BUCKET_NAME" \
-        --versioning-configuration Status=Enabled
+        --versioning-configuration Status=Enabled &>/dev/null
 
-    # Enable server-side encryption
-    log_info "Enabling server-side encryption..."
     aws s3api put-bucket-encryption --bucket "$BUCKET_NAME" \
         --server-side-encryption-configuration '{
             "Rules": [
@@ -154,16 +149,12 @@ create_resources() {
                     "BucketKeyEnabled": true
                 }
             ]
-        }'
+        }' &>/dev/null
 
-    # Block public access
-    log_info "Blocking public access..."
     aws s3api put-public-access-block --bucket "$BUCKET_NAME" \
         --public-access-block-configuration \
-        "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+        "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true" &>/dev/null
 
-    # Add lifecycle rule to clean up old versions
-    log_info "Adding lifecycle rule for old versions..."
     aws s3api put-bucket-lifecycle-configuration --bucket "$BUCKET_NAME" \
         --lifecycle-configuration '{
             "Rules": [
@@ -178,11 +169,11 @@ create_resources() {
                     }
                 }
             ]
-        }'
+        }' &>/dev/null
 
     # Create DynamoDB table for state locking
-    log_info "Creating DynamoDB table $TABLE_NAME for state locking..."
-    if aws dynamodb describe-table --table-name "$TABLE_NAME" --region "$REGION" 2>/dev/null; then
+    log_info "Creating DynamoDB table $TABLE_NAME..."
+    if aws dynamodb describe-table --table-name "$TABLE_NAME" --region "$REGION" &>/dev/null; then
         log_warn "DynamoDB table $TABLE_NAME already exists"
     else
         aws dynamodb create-table \
@@ -191,10 +182,9 @@ create_resources() {
             --key-schema AttributeName=LockID,KeyType=HASH \
             --billing-mode PAY_PER_REQUEST \
             --region "$REGION" \
-            --tags Key=Name,Value="$TABLE_NAME" Key=Purpose,Value="Terraform State Locking"
+            --tags Key=Name,Value="$TABLE_NAME" Key=Purpose,Value="Terraform State Locking" &>/dev/null
         
-        log_info "Waiting for table to be active..."
-        aws dynamodb wait table-exists --table-name "$TABLE_NAME" --region "$REGION"
+        aws dynamodb wait table-exists --table-name "$TABLE_NAME" --region "$REGION" &>/dev/null
         log_info "Created DynamoDB table"
     fi
 
