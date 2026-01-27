@@ -112,6 +112,15 @@ clusterGroup:
       chart: trident-protect
       repoURL: https://netapp.github.io/trident-protect-helm-chart
       chartVersion: 100.2510.0
+      ignoreDifferences:
+      - group: ""
+        kind: Secret
+        jqPathExpressions:
+        - .data
+      - group: admissionregistration.k8s.io
+        kind: ValidatingWebhookConfiguration
+        jqPathExpressions:
+        - .webhooks[*].clientConfig.caBundle
     protect-config:
       name: trident-protect-config
       namespace: trident-protect
