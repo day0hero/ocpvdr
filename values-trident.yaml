@@ -5,7 +5,7 @@ terraform:
 
 tridentFSX:
   iscsi:
-    mgmtLIF: svm-00610b4fa3c124762.fs-0292501bba536ce79.fsx.us-west-1.amazonaws.com
+    mgmtLIF: svm-0d84e9d83fa7cc8c7.fs-03e60f62845e057f8.fsx.us-west-1.amazonaws.com
     svm: SVM1
 
 # Trident Protect configuration
