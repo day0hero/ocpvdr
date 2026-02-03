@@ -113,19 +113,20 @@
     state: absent
   when: not use_s3_backend
 
-# Ensure file_system_name is set from cluster_name if not provided (skip for destroy)
-- name: Set file_system_name from cluster_name if not provided
+# Ensure file_system_name is set from cluster_name and region if not provided (skip for destroy)
+- name: Set file_system_name from cluster_name and region if not provided
   set_fact:
-    file_system_name: "{{ cluster_name }}-fsx-ontap"
+    file_system_name: "{{ cluster_name }}-{{ aws_region }}-fsx"
   when: 
     - not (terraform_destroy | default(false))
     - cluster_name is defined
     - cluster_name | default('') | length > 0
+    - aws_region is defined
     - file_system_name is not defined or file_system_name | default('') == ''
 
 - name: Fail if file_system_name cannot be determined
   fail:
-    msg: "file_system_name is required but not set and cluster_name is not available to derive it"
+    msg: "file_system_name is required but not set; cluster_name and aws_region are needed to derive it (cluster_name-region-fsx)"
   when:
     - not (terraform_destroy | default(false))
     - file_system_name is not defined or file_system_name | default('') == ''

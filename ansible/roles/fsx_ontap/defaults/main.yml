@@ -18,8 +18,8 @@ route_table_tags: []  # List of route table tag key:value to look up
 
 allowed_cidr: "10.0.0.0/16"  # CIDR range allowed to connect to FSx
 
-# FSx ONTAP Configuration
-file_system_name: "my-fsx-ontap"
+# FSx ONTAP Configuration (set to cluster_name-fsx-ontap or cluster_name-region-fsx via vars or -e)
+file_system_name: ""
 storage_capacity: 1024  # GiB (minimum 1024, maximum 196608)
 throughput_capacity: 1024  # MBps (valid values: 512, 1024, 2048)
 storage_type: "SSD"  # SSD or HDD

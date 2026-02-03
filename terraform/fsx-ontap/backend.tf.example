@@ -19,7 +19,7 @@ terraform {
     # Replace with your bucket name (create with: make setup-terraform-state)
     bucket = "REPLACE_WITH_YOUR_BUCKET_NAME"
     
-    # Path within the bucket for the state file
+    # Path within the bucket (when using Makefile: fsx-ontap/<cluster>/<region>/terraform.tfstate)
     key = "fsx-ontap/terraform.tfstate"
     
     # AWS region where the bucket is located

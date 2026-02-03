@@ -80,7 +80,7 @@ See `variables.tf` for all available variables. Key variables:
 | `vpc_id` | VPC ID | Required |
 | `subnet_ids` | List of subnet IDs (2 for MULTI_AZ) | Required |
 | `route_table_ids` | List of route table IDs | Required |
-| `file_system_name` | Name for the FSx file system | `my-fsx-ontap` |
+| `file_system_name` | Name for the FSx file system (via Make: `cluster-region-fsx`) | Required |
 | `storage_capacity` | Storage capacity in GiB | `1024` |
 | `throughput_capacity` | Throughput in MBps | `1024` |
 | `deployment_type` | `MULTI_AZ_1` or `SINGLE_AZ_1` | `MULTI_AZ_1` |
@@ -119,24 +119,27 @@ Passwords can be provided via:
 
 ### Local State
 
-By default, Terraform state is stored locally in `terraform.tfstate`. This is suitable for development but not recommended for production.
+By default (when not using S3), Terraform state is stored locally in `terraform.tfstate`. This is suitable for development but not recommended for production.
 
-### S3 Backend
+### S3 Backend (per cluster/region)
 
-For production, use the S3 backend:
+For production, use the S3 backend. The Makefile scopes state by cluster and region so that different regions or branches do not share state and cannot destroy each other's resources:
+
+- **State key**: `fsx-ontap/<CLUSTER>/<REGION>/terraform.tfstate` (e.g. `fsx-ontap/my-cluster/us-west-1/terraform.tfstate`)
+- Override with `TERRAFORM_STATE_KEY=...` if needed.
 
 ```bash
 # Setup S3 bucket and DynamoDB table
 make setup-terraform-state
 
-# Use the S3 backend
+# Use the S3 backend (state key is auto-derived from CLUSTER and REGION)
 make build-fsx-terraform TERRAFORM_STATE_BUCKET=<bucket-name>
 ```
 
 Benefits of S3 backend:
 - State is stored remotely and versioned
 - State locking prevents concurrent modifications
-- Team collaboration support
+- Per-cluster/region state avoids cross-region destroy
 
 ## Cleanup
 

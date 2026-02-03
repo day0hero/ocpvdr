@@ -229,9 +229,9 @@
           2. Pass it via -e fsx_admin_password=<password> on the command line.
       when: fsx_admin_password is not defined or fsx_admin_password == '' or fsx_admin_password == 'null'
 
-    - name: Set file_system_name from cluster_name if not provided
+    - name: Set file_system_name from cluster_name and region if not provided
       set_fact:
-        file_system_name: "{{ cluster_name }}-fsx-ontap"
+        file_system_name: "{{ cluster_name }}-{{ aws_region }}-fsx"
       when: (file_system_name is not defined) or (file_system_name | default('') | trim | length == 0)
 
     - name: Display FSx configuration
@@ -244,7 +244,7 @@
     # Ensure file_system_name is set before calling role
     - name: Compute file_system_name for role
       set_fact:
-        computed_file_system_name: "{{ file_system_name if (file_system_name | default('') | trim | length > 0) else cluster_name + '-fsx-ontap' }}"
+        computed_file_system_name: "{{ file_system_name if (file_system_name | default('') | trim | length > 0) else cluster_name + '-' + aws_region + '-fsx' }}"
 
     - name: Debug computed file_system_name
       debug:

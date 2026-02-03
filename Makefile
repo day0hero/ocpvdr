@@ -100,8 +100,9 @@ destroy-trident-protect-s3: ## Delete S3 bucket and IAM resources for Trident Pr
 ##@ FSx Terraform Tasks
 
 # Terraform state configuration - read from values-trident.yaml if not overridden
+# State key is scoped by cluster and region so different regions/branches do not share state
 TERRAFORM_STATE_BUCKET ?= $(shell yq '.terraform.state.bucket // ""' values-trident.yaml 2>/dev/null)
-TERRAFORM_STATE_KEY ?= fsx-ontap/terraform.tfstate
+TERRAFORM_STATE_KEY ?= fsx-ontap/$(CLUSTER)/$(REGION)/terraform.tfstate
 TERRAFORM_STATE_DYNAMODB_TABLE ?= terraform-state-lock
 
 # Terraform container configuration

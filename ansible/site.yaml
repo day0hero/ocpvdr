@@ -291,6 +291,15 @@
         - not (delete_resources | default(false))
         - (svm_admin_password is not defined or svm_admin_password == '' or svm_admin_password == 'null' or svm_admin_password == None)
 
+    - name: Set file_system_name from cluster_name and region if not provided
+      set_fact:
+        file_system_name: "{{ cluster_name }}-{{ aws_region }}-fsx"
+      when:
+        - not (delete_resources | default(false))
+        - (file_system_name is not defined or file_system_name | default('') | trim | length == 0)
+        - cluster_name is defined
+        - aws_region is defined
+
     - name: Create FSx ONTAP filesystem
       include_role:
         name: fsx_ontap
