@@ -2,6 +2,13 @@
 # Example variables file for FSx ONTAP playbook
 # Copy this file to fsx-ontap-vars.yml and update with your values
 
+# Terraform State Configuration (for multi-region/multi-cluster deployments)
+# IMPORTANT: terraform_state_bucket_region must be the region where your S3 bucket is located
+# This is separate from aws_region (where you deploy FSx resources)
+# terraform_state_bucket: "patterns-terraform-state"
+# terraform_state_bucket_region: "us-west-1"  # Region where the S3 bucket exists
+# terraform_state_key is auto-generated as fsx-ontap/<cluster_name>/<aws_region>/terraform.tfstate
+
 # Network Configuration
 # Option 1: Provide direct IDs (uncomment and use these)
 # vpc_id: "vpc-0123456789abcdef0"
@@ -10,7 +17,7 @@
 # route_table_ids: 
 #   - "rtb-0123456789abcdef0"
 
-# AWS Region
+# AWS Region (where to deploy FSx resources - NOT the state bucket region)
 # aws_region: ""  # Set dynamically via Makefile or command line
 
 # Option 2: Look up by name or tag (uncomment and use these instead)

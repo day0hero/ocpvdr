@@ -5,7 +5,10 @@
 # This file shows the backend configuration for storing Terraform state in S3.
 # Copy this to backend.tf and update the values, OR let Ansible generate it.
 #
-# Before using this backend, you must create the S3 bucket and DynamoDB table:
+# IMPORTANT: For multi-region deployments, use unique state keys per cluster/region!
+# The Ansible role auto-generates: fsx-ontap/<cluster_name>/<aws_region>/terraform.tfstate
+#
+# Before using this backend, you must create the S3 bucket:
 #   make setup-terraform-state
 #
 # Or manually:
@@ -19,17 +22,20 @@ terraform {
     # Replace with your bucket name (create with: make setup-terraform-state)
     bucket = "REPLACE_WITH_YOUR_BUCKET_NAME"
     
-    # Path within the bucket (when using Makefile: fsx-ontap/<cluster>/<region>/terraform.tfstate)
-    key = "fsx-ontap/terraform.tfstate"
+    # Path within the bucket - MUST BE UNIQUE per cluster/region deployment
+    # Format: fsx-ontap/<cluster_name>/<aws_region>/terraform.tfstate
+    # Example for cluster "prod" in us-west-2: fsx-ontap/prod/us-west-2/terraform.tfstate
+    key = "fsx-ontap/CLUSTER_NAME/AWS_REGION/terraform.tfstate"
     
-    # AWS region where the bucket is located
-    region = "us-east-1"
+    # AWS region where the S3 BUCKET is located (NOT the deployment region!)
+    # This is where you created the state bucket, not where you deploy FSx
+    region = "us-west-1"
     
     # Enable encryption at rest
     encrypt = true
     
-    # DynamoDB table for state locking (prevents concurrent modifications)
-    dynamodb_table = "terraform-state-lock"
+    # Use native S3 locking (replaces deprecated dynamodb_table)
+    use_lockfile = true
     
     # Optional: Use specific AWS profile
     # profile = "default"

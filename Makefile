@@ -102,8 +102,10 @@ destroy-trident-protect-s3: ## Delete S3 bucket and IAM resources for Trident Pr
 # Terraform state configuration - read from values-trident.yaml if not overridden
 # State key is scoped by cluster and region so different regions/branches do not share state
 TERRAFORM_STATE_BUCKET ?= $(shell yq '.terraform.state.bucket // ""' values-trident.yaml 2>/dev/null)
+# IMPORTANT: This is the region where your S3 bucket exists, NOT the deployment region
+# This must be set explicitly when using S3 backend for multi-region deployments
+TERRAFORM_STATE_BUCKET_REGION ?= $(shell yq '.terraform.state.region // ""' values-trident.yaml 2>/dev/null)
 TERRAFORM_STATE_KEY ?= fsx-ontap/$(CLUSTER)/$(REGION)/terraform.tfstate
-TERRAFORM_STATE_DYNAMODB_TABLE ?= terraform-state-lock
 
 # Terraform container configuration
 TERRAFORM_IMAGE ?= localhost/terraform-ubi-minimal:1.14.3
@@ -111,23 +113,23 @@ CONTAINER_RUNTIME ?= podman
 USE_CONTAINER ?= true
 
 .PHONY: setup-terraform-state
-setup-terraform-state: ## Create S3 bucket and DynamoDB table for Terraform state storage
-	@if [ -z "$(REGION)" ]; then \
-		echo "Error: Could not detect REGION from cluster. Ensure KUBECONFIG is set or oc context is configured."; \
-		echo "You can override by passing REGION=us-east-1"; \
+setup-terraform-state: ## Create S3 bucket for Terraform state storage
+	@if [ -z "$(TERRAFORM_STATE_BUCKET_REGION)" ]; then \
+		echo "Error: TERRAFORM_STATE_BUCKET_REGION is required."; \
+		echo "This is the region where the state bucket will be created."; \
+		echo "Example: make setup-terraform-state TERRAFORM_STATE_BUCKET_REGION=us-west-1"; \
 		exit 1; \
 	fi
-	REGION=$(REGION) BUCKET_NAME=$(TERRAFORM_STATE_BUCKET) TABLE_NAME=$(TERRAFORM_STATE_DYNAMODB_TABLE) \
+	REGION=$(TERRAFORM_STATE_BUCKET_REGION) BUCKET_NAME=$(TERRAFORM_STATE_BUCKET) \
 		./scripts/setup-terraform-state-s3.sh
 
 .PHONY: destroy-terraform-state
-destroy-terraform-state: ## Delete S3 bucket and DynamoDB table for Terraform state
-	@if [ -z "$(REGION)" ]; then \
-		echo "Error: Could not detect REGION from cluster. Ensure KUBECONFIG is set or oc context is configured."; \
-		echo "You can override by passing REGION=us-east-1"; \
+destroy-terraform-state: ## Delete S3 bucket for Terraform state
+	@if [ -z "$(TERRAFORM_STATE_BUCKET_REGION)" ]; then \
+		echo "Error: TERRAFORM_STATE_BUCKET_REGION is required."; \
 		exit 1; \
 	fi
-	REGION=$(REGION) BUCKET_NAME=$(TERRAFORM_STATE_BUCKET) TABLE_NAME=$(TERRAFORM_STATE_DYNAMODB_TABLE) \
+	REGION=$(TERRAFORM_STATE_BUCKET_REGION) BUCKET_NAME=$(TERRAFORM_STATE_BUCKET) \
 		./scripts/setup-terraform-state-s3.sh --delete
 
 .PHONY: build-fsx-terraform
@@ -146,7 +148,14 @@ build-fsx-terraform: ## Create FSx ONTAP using Terraform (runs in container by d
 	@echo "Auto-detected CLUSTER: $(CLUSTER)"
 	@echo "Using container: $(USE_CONTAINER) (image: $(TERRAFORM_IMAGE))"
 	@if [ -n "$(TERRAFORM_STATE_BUCKET)" ]; then \
-		echo "Using S3 backend: $(TERRAFORM_STATE_BUCKET)"; \
+		if [ -z "$(TERRAFORM_STATE_BUCKET_REGION)" ]; then \
+			echo "Error: TERRAFORM_STATE_BUCKET_REGION is required when using S3 backend."; \
+			echo "This must be the region where your S3 bucket is located (not deployment region)."; \
+			echo "Example: make build-fsx-terraform TERRAFORM_STATE_BUCKET_REGION=us-west-1"; \
+			exit 1; \
+		fi; \
+		echo "Using S3 backend: $(TERRAFORM_STATE_BUCKET) (bucket region: $(TERRAFORM_STATE_BUCKET_REGION))"; \
+		echo "State key: $(TERRAFORM_STATE_KEY)"; \
 		ansible-playbook $(EXTRA_PLAYBOOK_OPTS) ansible/site-terraform.yaml \
 			-e @ansible/fsx-ontap-vars.yml \
 			-e aws_region=$(REGION) \
@@ -155,8 +164,8 @@ build-fsx-terraform: ## Create FSx ONTAP using Terraform (runs in container by d
 			-e container_runtime=$(CONTAINER_RUNTIME) \
 			-e terraform_image=$(TERRAFORM_IMAGE) \
 			-e terraform_state_bucket=$(TERRAFORM_STATE_BUCKET) \
-			-e terraform_state_key=$(TERRAFORM_STATE_KEY) \
-			-e terraform_state_dynamodb_table=$(TERRAFORM_STATE_DYNAMODB_TABLE); \
+			-e terraform_state_bucket_region=$(TERRAFORM_STATE_BUCKET_REGION) \
+			-e terraform_state_key=$(TERRAFORM_STATE_KEY); \
 	else \
 		echo "Using local Terraform state (set TERRAFORM_STATE_BUCKET for S3 backend)"; \
 		ansible-playbook $(EXTRA_PLAYBOOK_OPTS) ansible/site-terraform.yaml \
@@ -184,7 +193,13 @@ destroy-fsx-terraform: ## Destroy FSx ONTAP resources using Terraform
 	@echo "Auto-detected CLUSTER: $(CLUSTER)"
 	@echo "Using container: $(USE_CONTAINER) (image: $(TERRAFORM_IMAGE))"
 	@if [ -n "$(TERRAFORM_STATE_BUCKET)" ]; then \
-		echo "Using S3 backend: $(TERRAFORM_STATE_BUCKET)"; \
+		if [ -z "$(TERRAFORM_STATE_BUCKET_REGION)" ]; then \
+			echo "Error: TERRAFORM_STATE_BUCKET_REGION is required when using S3 backend."; \
+			echo "This must be the region where your S3 bucket is located (not deployment region)."; \
+			exit 1; \
+		fi; \
+		echo "Using S3 backend: $(TERRAFORM_STATE_BUCKET) (bucket region: $(TERRAFORM_STATE_BUCKET_REGION))"; \
+		echo "State key: $(TERRAFORM_STATE_KEY)"; \
 		ansible-playbook $(EXTRA_PLAYBOOK_OPTS) ansible/site-terraform.yaml \
 			-e @ansible/fsx-ontap-vars.yml \
 			-e aws_region=$(REGION) \
@@ -194,8 +209,8 @@ destroy-fsx-terraform: ## Destroy FSx ONTAP resources using Terraform
 			-e container_runtime=$(CONTAINER_RUNTIME) \
 			-e terraform_image=$(TERRAFORM_IMAGE) \
 			-e terraform_state_bucket=$(TERRAFORM_STATE_BUCKET) \
-			-e terraform_state_key=$(TERRAFORM_STATE_KEY) \
-			-e terraform_state_dynamodb_table=$(TERRAFORM_STATE_DYNAMODB_TABLE); \
+			-e terraform_state_bucket_region=$(TERRAFORM_STATE_BUCKET_REGION) \
+			-e terraform_state_key=$(TERRAFORM_STATE_KEY); \
 	else \
 		echo "Using local Terraform state"; \
 		ansible-playbook $(EXTRA_PLAYBOOK_OPTS) ansible/site-terraform.yaml \

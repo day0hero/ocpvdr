@@ -155,17 +155,38 @@
       register: subnet_lookup
       when: vpc_id is defined and vpc_id != ""
 
-    - name: Set subnet IDs
+    - name: Fail if not enough subnets found
+      fail:
+        msg: "Need at least 2 subnets for MULTI_AZ deployment, found {{ subnet_lookup.subnets | default([]) | length }}"
+      when: subnet_lookup.subnets | default([]) | length < 2
+
+    # FSx ONTAP only supports 2 subnets (one per AZ for Multi-AZ deployment)
+    # Select 2 subnets from different availability zones
+    - name: Select 2 subnets from different AZs for FSx ONTAP
       set_fact:
-        subnet_ids: "{{ subnet_lookup.subnets | map(attribute='id') | list }}"
+        subnet_ids: "{{ (subnet_lookup.subnets | sort(attribute='availability_zone') | groupby('availability_zone') | map(attribute='1') | map('first') | map(attribute='id') | list)[:2] }}"
       when:
         - subnet_lookup.subnets is defined
         - subnet_lookup.subnets | length >= 2
 
-    - name: Fail if not enough subnets found
+    - name: Fail if could not select 2 subnets from different AZs
       fail:
-        msg: "Need at least 2 subnets for MULTI_AZ deployment, found {{ subnet_lookup.subnets | default([]) | length }}"
+        msg: |
+          FSx ONTAP Multi-AZ requires 2 subnets in different availability zones.
+          Found {{ subnet_lookup.subnets | length }} subnets but could only select {{ subnet_ids | length }} from different AZs.
+          Available subnets:
+          {% for s in subnet_lookup.subnets %}
+            - {{ s.id }} ({{ s.availability_zone }})
+          {% endfor %}
       when: subnet_ids | default([]) | length < 2
+
+    - name: Display subnet selection
+      debug:
+        msg:
+          - "Subnet Selection for FSx ONTAP (max 2 per Multi-AZ requirement):"
+          - "  Found {{ subnet_lookup.subnets | length }} matching subnets"
+          - "  Selected {{ subnet_ids | length }} subnets from different AZs: {{ subnet_ids }}"
+      when: subnet_lookup.subnets is defined
 
     # Route Table Lookup
     - name: Look up route tables for subnets

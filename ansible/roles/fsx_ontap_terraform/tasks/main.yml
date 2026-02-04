@@ -100,6 +100,44 @@
   set_fact:
     use_s3_backend: "{{ terraform_state_bucket | default('') | length > 0 }}"
 
+- name: Fail if S3 backend bucket region is not specified
+  fail:
+    msg: |
+      terraform_state_bucket_region is required when using S3 backend.
+      This must be the region where your S3 bucket is located, not the deployment region.
+      Example: -e terraform_state_bucket_region=us-west-1
+  when:
+    - use_s3_backend
+    - terraform_state_bucket_region | default('') | length == 0
+
+- name: Generate unique terraform state key for cluster and region
+  set_fact:
+    terraform_state_key: "fsx-ontap/{{ cluster_name }}/{{ aws_region }}/terraform.tfstate"
+  when:
+    - use_s3_backend
+    - terraform_state_key | default('') | length == 0
+    - cluster_name is defined
+    - cluster_name | default('') | length > 0
+
+- name: Fail if terraform_state_key cannot be determined
+  fail:
+    msg: |
+      terraform_state_key is required but could not be auto-generated.
+      Either provide terraform_state_key directly, or ensure cluster_name is set.
+      Example: -e terraform_state_key=fsx-ontap/mycluster/us-west-2/terraform.tfstate
+  when:
+    - use_s3_backend
+    - terraform_state_key | default('') | length == 0
+
+- name: Display S3 backend configuration
+  debug:
+    msg:
+      - "S3 Backend Configuration:"
+      - "  Bucket: {{ terraform_state_bucket }}"
+      - "  Bucket Region: {{ terraform_state_bucket_region }}"
+      - "  State Key: {{ terraform_state_key }}"
+  when: use_s3_backend
+
 - name: Generate backend.tf for S3 state storage
   template:
     src: backend.tf.j2

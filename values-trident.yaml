@@ -2,10 +2,12 @@
 terraform:
   state:
     bucket: patterns-terraform-state
+    # Region where the S3 bucket is located (NOT the deployment region)
+    region: us-west-1
 
 tridentFSX:
   iscsi:
-    mgmtLIF: svm-0d84e9d83fa7cc8c7.fs-03e60f62845e057f8.fsx.us-west-1.amazonaws.com
+    mgmtLIF: svm-0f1ca1686f065a543.fs-0305b2cb34e61ec71.fsx.us-west-2.amazonaws.com
     svm: SVM1
 
 # Trident Protect configuration

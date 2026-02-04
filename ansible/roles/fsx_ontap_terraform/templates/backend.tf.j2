@@ -7,8 +7,8 @@ terraform {
   backend "s3" {
     bucket         = "{{ terraform_state_bucket }}"
     key            = "{{ terraform_state_key }}"
-    region         = "{{ aws_region }}"
+    region         = "{{ terraform_state_bucket_region }}"
     encrypt        = true
-    dynamodb_table = "{{ terraform_state_dynamodb_table }}"
+    use_lockfile   = true
   }
 }

@@ -4,7 +4,11 @@
 # Terraform Configuration
 terraform_dir: "{{ playbook_dir }}/../terraform/fsx-ontap"
 terraform_state_bucket: ""
-terraform_state_key: "fsx-ontap/terraform.tfstate"
+# The region where the S3 state bucket is located (NOT the deployment region)
+# This must match where your state bucket was created
+terraform_state_bucket_region: ""
+# State key will be auto-generated as fsx-ontap/<cluster_name>/<aws_region>/terraform.tfstate if not set
+terraform_state_key: ""
 terraform_state_dynamodb_table: "terraform-state-lock"
 
 # Container Configuration
