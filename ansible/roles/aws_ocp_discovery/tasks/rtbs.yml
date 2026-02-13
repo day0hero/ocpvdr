@@ -1,0 +1,38 @@
+---
+- name: Set route table filters for private subnets
+  ansible.builtin.set_fact:
+    rtb_filters: |
+      {
+        "vpc-id": "{{ aws_vpc_id }}",
+        "association.subnet-id": {{ aws_vpc_private_subnet_ids }}
+      }
+  when: aws_ocp_discovery_rtb_association_type == "private"
+
+- name: Set route table filters for public subnets
+  ansible.builtin.set_fact:
+    rtb_filters: |
+      {
+        "vpc-id": "{{ aws_vpc_id }}",
+        "association.subnet-id": {{ aws_vpc_public_subnet_ids }}
+      }
+  when: aws_ocp_discovery_rtb_association_type == "public"
+
+- name: Set route table filters for main rtb
+  ansible.builtin.set_fact:
+    rtb_filters: |
+      {
+        "vpc-id": "{{ aws_vpc_id }}",
+        "association.main": "true"
+      }
+  when: aws_ocp_discovery_rtb_association_type == "main"
+
+- name: Lookup route_tables by tags
+  amazon.aws.ec2_vpc_route_table_info:
+    region: "{{ ocp_aws_region }}"
+    filters: "{{ rtb_filters }}"
+  register: aws_vpc_route_tables
+
+- name: Extract route table ids
+  ansible.builtin.set_fact:
+    aws_vpc_route_table_ids: "{{ (aws_vpc_route_table_ids | default([])) + [item.id] }}"
+  loop: "{{ aws_vpc_route_tables.route_tables }}"

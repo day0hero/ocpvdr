@@ -3,216 +3,52 @@
   hosts: localhost
   gather_facts: false
   vars_files:
-    - "{{ playbook_dir }}/fsx-ontap-vars.yml"
+    - "{{ playbook_dir }}/vars/fsx-ontap-vars.yml"
   tasks:
     - name: Skip creation if deletion is requested
-      meta: end_play
+      ansible.builtin.meta: end_play
       when: delete_resources | default(false)
 
-    - name: Check if this is an HCP cluster
-      kubernetes.core.k8s_info:
-        api_version: config.openshift.io/v1
-        kind: Infrastructure
-        name: cluster
-      register: infrastructure_info
-      failed_when: false
+    - name: Discover AWS values
+      ansible.builtin.include_role:
+        name: aws_ocp_discovery
 
-    - name: Set is_hcp_cluster fact from infrastructure
-      set_fact:
-        is_hcp_cluster: "{{ infrastructure_info.resources[0].status.controlPlaneTopology | default('') == 'External' if (infrastructure_info.resources is defined and infrastructure_info.resources | length > 0) else false }}"
-
-    - name: Set vpc_name fact from cluster_name (standard cluster)
-      set_fact:
-        vpc_name: "{{ cluster_name }}-vpc"
-      when: 
-        - cluster_name is defined
-        - not (is_hcp_cluster | default(false) | bool)
-
-    - name: Set vpc_name fact from cluster_name (HCP cluster)
-      set_fact:
-        vpc_name: "{{ cluster_name }}-vpc"
-      when: 
-        - cluster_name is defined
-        - is_hcp_cluster | default(false) | bool
-
-    - name: Debug network configuration before role execution
-      debug:
+    - name: Display AWS and Cluster discovery results
+      ansible.builtin.debug:
         msg:
-          - "Network Configuration:"
-          - "  cluster_name: {{ cluster_name | default('not set') }}"
-          - "  aws_region: {{ aws_region | default('not set') }}"
-          - "  is_hcp_cluster: {{ is_hcp_cluster | default('not set') }}"
-          - "  vpc_name: {{ vpc_name | default('not set') }}"
-
-    - name: Test VPC lookup by name (standard cluster)
-      amazon.aws.ec2_vpc_net_info:
-        region: "{{ aws_region }}"
-        filters:
-          "tag:Name": "{{ vpc_name }}"
-      register: test_vpc_lookup
-      when: 
-        - vpc_name is defined and vpc_name != ""
-        - not (is_hcp_cluster | default(false) | bool)
-
-    - name: Test VPC lookup by name (HCP cluster - primary method)
-      amazon.aws.ec2_vpc_net_info:
-        region: "{{ aws_region }}"
-        filters:
-          "tag:Name": "{{ vpc_name }}"
-      register: test_vpc_lookup_hcp_name
-      when: 
-        - vpc_name is defined and vpc_name != ""
-        - is_hcp_cluster | default(false) | bool
-
-    - name: Test VPC lookup by cluster tag (HCP cluster - fallback method)
-      amazon.aws.ec2_vpc_net_info:
-        region: "{{ aws_region }}"
-        filters:
-          "tag:sigs.k8s.io/cluster-api-provider-aws/cluster/{{ cluster_name }}": owned
-      register: test_vpc_lookup_hcp_tag
-      when: 
-        - vpc_name is defined and vpc_name != ""
-        - is_hcp_cluster | default(false) | bool
-        - test_vpc_lookup_hcp_name.vpcs | default([]) | length == 0
-
-    - name: Set VPC lookup result for HCP cluster
-      set_fact:
-        test_vpc_lookup:
-          vpcs: "{{ test_vpc_lookup_hcp_tag.vpcs if (test_vpc_lookup_hcp_tag.vpcs | default([]) | length > 0) else test_vpc_lookup_hcp_name.vpcs }}"
-      when: 
-        - is_hcp_cluster | default(false) | bool
-        - test_vpc_lookup_hcp_name is defined
-
-    - name: Display VPC lookup test result
-      debug:
-        var: test_vpc_lookup
-      when: test_vpc_lookup is defined
-
-    - name: Display HCP VPC lookup details
-      debug:
-        msg:
-          - "HCP VPC Lookup Results:"
-          - "  By name: {{ 'found' if (test_vpc_lookup_hcp_name.vpcs | default([]) | length > 0) else 'not found' }}"
-          - "  By cluster tag: {{ 'found' if (test_vpc_lookup_hcp_tag.vpcs | default([]) | length > 0) else 'not found' }}"
-      when: 
-        - is_hcp_cluster | default(false) | bool
-        - test_vpc_lookup_hcp_name is defined
-
-    - name: Get VPC ID from lookup result
-      set_fact:
-        vpc_id_from_lookup: "{{ test_vpc_lookup.vpcs[0].vpc_id if (test_vpc_lookup.vpcs | default([]) | length > 0) else '' }}"
-      when: test_vpc_lookup is defined
-
-    # This is because keys in ansible dicts generally are not interpolated
-    - name: Dynamically construct tag filter - non-HCP version
-      set_fact:
-        subnet_tag_filters: "{{ tag_filters_list | items2dict }}"
-      vars:
-        tag_filters_list:
-          - key: "vpc-id"
-            value: "{{ vpc_id_from_lookup }}"
-          - key: "tag:sigs.k8s.io/cluster-api-provider-aws/role"
-            value: "private"
-          - key: "tag:kubernetes.io/cluster/{{ cluster_name }}"
-            value: "owned"
-          - key: "tag:sigs.k8s.io/cluster-api-provider-aws/cluster/{{ cluster_name }}"
-            value: "owned"
-      when:
-        - vpc_id_from_lookup is defined and vpc_id_from_lookup != ""
-        - not (is_hcp_cluster | default(false) | bool)
-
-    - name: Dynamically construct tag filter - HCP version
-      set_fact:
-        subnet_tag_filters: "{{ tag_filters_list | items2dict }}"
-      vars:
-        tag_filters_list:
-          - key: "vpc-id"
-            value: "{{ vpc_id_from_lookup }}"
-          - key: "tag:sigs.k8s.io/cluster-api-provider-aws/role"
-            value: "private"
-      when:
-        - vpc_id_from_lookup is defined and vpc_id_from_lookup != ""
-        - is_hcp_cluster | default(false) | bool
-
-    - name: Lookup subnets by tags to get names
-      amazon.aws.ec2_vpc_subnet_info:
-        region: "{{ aws_region }}"
-        filters: "{{ subnet_tag_filters }}"
-      register: tag_subnets
-      when:
-        - vpc_id_from_lookup is defined and vpc_id_from_lookup != ""
-        - not (is_hcp_cluster | default(false) | bool)
-
-    - name: Set name facts for discovered subnets
-      set_fact:
-        subnet_ids: "{{ (subnet_ids | default([])) + [item.id] }}"
-      loop: "{{ tag_subnets.subnets }}"
-      when:
-        - tag_subnets.subnets is defined
-        - (tag_subnets.subnets | length) > 0
-
-    - name: Extract subnet facts for later
-      set_fact:
-        subnet_1_id: "{{ tag_subnets.subnets[0].id }}"
-        subnet_1_name: "{{ tag_subnets.subnets[0].tags.Name }}"
-        subnet_2_id: "{{ tag_subnets.subnets[1].id }}"
-        subnet_2_name: "{{ tag_subnets.subnets[1].tags.Name }}"
-      when:
-        - tag_subnets.subnets | length == 2
-
-    - name: Find route tables based on subnet query
-      amazon.aws.ec2_vpc_route_table_info:
-        region: "{{ aws_region }}"
-        filters:
-          "association.subnet-id": "{{ subnet_ids }}"
-          vpc-id: "{{ vpc_id_from_lookup }}"
-      register: queried_route_tables
-      when:
-        - vpc_id_from_lookup is defined
-        - subnet_ids is defined
-
-    - name: Set route table ids from query
-      set_fact:
-        route_table_ids: "{{ (route_table_ids | default([])) + [item.id] }}"
-      loop: "{{ queried_route_tables.route_tables }}"
-      when:
-        - queried_route_tables.route_tables is defined
-
-    - name: Display subnet lookup results
-      debug:
-        msg:
+          - "Cluster lookup results:"
+          - "  ocp_infra_name: {{ ocp_infra_name }}"
+          - "  ocp_platform: {{ ocp_platform }}"
+          - "  ocp_aws_region: {{ ocp_aws_region }}"
+          - "  ocp_app_domain: {{ ocp_app_domain }}"
+          - "  ocp_version: {{ ocp_version }}"
+          - "  ocp_base_domain: {{ ocp_base_domain }}"
+          - "  ocp_cluster_name: {{ ocp_base_domain }}"
+          - "VPC Lookup Results:"
+          - "  aws_vpc_id: {{ aws_vpc_id }}"
           - "Subnet Lookup Results:"
-          - "  subnet_1_name: {{ subnet_1_name | default('not set') }}"
-          - "  subnet_1_id: {{ subnet_1_id | default('not set') }}"
-          - "  subnet_2_name: {{ subnet_2_name | default('not set') }}"
-          - "  subnet_2_id: {{ subnet_2_id | default('not set') }}"
-      when: 
-        - test_subnet_1_lookup is defined or test_subnet_1_lookup_hcp is defined
-
-    - name: Display route table lookup results
-      debug:
-        msg:
+          - "  aws_vpc_private_subnet_ids: {{ aws_vpc_private_subnet_ids }}"
           - "Route Table Lookup Results:"
-          - "  route_table_ids: {{ route_table_ids | default('not set') }}"
+          - "  aws_vpc_route_table_ids: {{ aws_vpc_route_table_ids }}"
 
     - name: Load values-global.yaml to get pattern name
-      set_fact:
+      ansible.builtin.set_fact:
         values_global_data: "{{ lookup('file', playbook_dir + '/../values-global.yaml') | from_yaml }}"
       when: not (delete_resources | default(false))
 
     - name: Extract pattern name from values-global
-      set_fact:
+      ansible.builtin.set_fact:
         pattern_name: "{{ values_global_data.global.pattern | default('ocpvdr') }}"
       when: not (delete_resources | default(false))
 
     - name: Check if ~/.fsx file exists
-      stat:
+      ansible.builtin.stat:
         path: "{{ '~/.fsx' | expanduser }}"
       register: fsx_file_stat
       when: not (delete_resources | default(false))
 
     - name: Read password from ~/.fsx file
-      slurp:
+      ansible.builtin.slurp:
         src: "{{ '~/.fsx' | expanduser }}"
       register: fsx_file_content
       when:
@@ -221,7 +57,7 @@
       failed_when: false
 
     - name: Extract password from ~/.fsx file
-      set_fact:
+      ansible.builtin.set_fact:
         fsx_password_from_file: "{{ fsx_file_content.content | b64decode | string | trim }}"
       when:
         - not (delete_resources | default(false))
@@ -240,7 +76,7 @@
         - fsx_password_from_file | length > 0
 
     - name: Debug password from file
-      debug:
+      ansible.builtin.debug:
         msg:
           - "fsx_password_from_file: '{{ fsx_password_from_file | default('NOT SET') }}'"
           - "fsx_admin_password: '{{ fsx_admin_password | default('NOT SET') }}'"
@@ -249,17 +85,17 @@
       when: not (delete_resources | default(false))
 
     - name: Debug final password values
-      debug:
+      ansible.builtin.debug:
         var: fsx_admin_password
       when: not (delete_resources | default(false))
 
     - name: Debug final svm password values
-      debug:
+      ansible.builtin.debug:
         var: svm_admin_password
       when: not (delete_resources | default(false))
 
     - name: Validate fsx_admin_password is set
-      fail:
+      ansible.builtin.fail:
         msg: >
           fsx_admin_password is required but not found.
           Please either:
@@ -270,7 +106,7 @@
         - (fsx_admin_password is not defined or fsx_admin_password == '' or fsx_admin_password == 'null' or fsx_admin_password == None)
 
     - name: Validate svm_admin_password is set
-      fail:
+      ansible.builtin.fail:
         msg: >
           svm_admin_password is required but not found.
           Please either:
@@ -281,22 +117,22 @@
         - (svm_admin_password is not defined or svm_admin_password == '' or svm_admin_password == 'null' or svm_admin_password == None)
 
     - name: Create FSx ONTAP filesystem
-      include_role:
+      ansible.builtin.include_role:
         name: fsx_ontap
 
     - name: Update tridentFSX.iscsi.mgmtLIF in values-trident.yaml
       ansible.builtin.replace:
-        path: "{{ playbook_dir }}/../values-trident.yaml"
+        path: "{{ playbook_dir }}/../overrides/values-trident.yaml"
         regexp: '^(\s{4})mgmtLIF:\s+.*'
         replace: '\1mgmtLIF: {{ svm_mgmt_dns_name }}'
-      when: 
+      when:
         - not (delete_resources | default(false))
         - svm_mgmt_dns_name is defined
         - svm_mgmt_dns_name != ""
 
     - name: Update tridentFSX.iscsi.svm in values-trident.yaml
       ansible.builtin.replace:
-        path: "{{ playbook_dir }}/../values-trident.yaml"
+        path: "{{ playbook_dir }}/../overrides/values-trident.yaml"
         regexp: '^(\s{4})svm:\s+.*'
         replace: '\1svm: {{ svm_name_result }}'
       when:
@@ -305,7 +141,7 @@
         - svm_name_result != ""
 
     - name: Display updated values
-      debug:
+      ansible.builtin.debug:
         msg:
           - "Updated values-trident.yaml:"
           - "  mgmtLIF: {{ svm_mgmt_dns_name | default('not set') }}"
@@ -316,9 +152,12 @@
   hosts: localhost
   gather_facts: false
   tasks:
+    - name: Discover AWS values
+      ansible.builtin.include_role:
+        name: aws_ocp_discovery
+
     - name: Delete FSx ONTAP resources
-      include_role:
+      ansible.builtin.include_role:
         name: fsx_ontap
         tasks_from: delete
       when: delete_resources | default(false)
-

@@ -4,59 +4,14 @@
 
 include Makefile-common
 
-# Get cloud info from cluster using current oc context/kubeconfig
-# Region and cluster are auto-detected from the cluster infrastructure
-# REGION can be overridden: make build-fsx REGION=us-east-1
-ifeq ($(origin REGION),command line)
-  # REGION was explicitly provided, use it
-  DETECTED_REGION := $(REGION)
-else
-  # Auto-detect REGION from cluster (uses current oc context)
-  DETECTED_REGION := $(shell oc get infrastructure cluster -o jsonpath='{.status.platformStatus.aws.region}' 2>/dev/null)
-endif
-REGION := $(DETECTED_REGION)
-
-ifeq ($(origin CLUSTER),command line)
-  # CLUSTER was explicitly provided, use it
-  DETECTED_CLUSTER := $(CLUSTER)
-else
-  # Auto-detect CLUSTER from cluster infrastructure (uses current oc context)
-  DETECTED_CLUSTER := $(shell oc get infrastructure cluster -o jsonpath='{.status.infrastructureName}' 2>/dev/null)
-endif
-CLUSTER := $(DETECTED_CLUSTER)
-
 EXTRA_PLAYBOOK_OPTS ?=
 
 ##@ FSx Tasks
 
 .PHONY: build-fsx
 build-fsx: ## Debug VPC lookup (region auto-detected from cluster, override with REGION=us-east-1)
-	@if [ -z "$(REGION)" ]; then \
-		echo "Error: Could not detect REGION from cluster. Ensure KUBECONFIG is set or oc context is configured."; \
-		echo "You can override by passing REGION=us-east-1"; \
-		exit 1; \
-	fi
-	@if [ -z "$(CLUSTER)" ]; then \
-		echo "Error: Could not detect CLUSTER from cluster infrastructure."; \
-		echo "You can override by passing CLUSTER=my-cluster"; \
-		exit 1; \
-	fi
-	@echo "Auto-detected REGION: $(REGION)"
-	@echo "Auto-detected CLUSTER: $(CLUSTER)"
-	ansible-playbook $(EXTRA_PLAYBOOK_OPTS) ansible/site.yaml -e @ansible/fsx-ontap-vars.yml -e aws_region=$(REGION) -e cluster_name=$(CLUSTER)
+	ansible-playbook $(EXTRA_PLAYBOOK_OPTS) ansible/site.yaml -e @ansible/vars/fsx-ontap-vars.yml
 
 .PHONY: destroy-fsx
 destroy-fsx: ## Delete FSx ONTAP resources (region auto-detected from cluster, override with REGION=us-east-1)
-	@if [ -z "$(REGION)" ]; then \
-		echo "Error: Could not detect REGION from cluster. Ensure KUBECONFIG is set or oc context is configured."; \
-		echo "You can override by passing REGION=us-east-1"; \
-		exit 1; \
-	fi
-	@if [ -z "$(CLUSTER)" ]; then \
-		echo "Error: Could not detect CLUSTER from cluster infrastructure."; \
-		echo "You can override by passing CLUSTER=my-cluster"; \
-		exit 1; \
-	fi
-	@echo "Auto-detected REGION: $(REGION)"
-	@echo "Auto-detected CLUSTER: $(CLUSTER)"
-	ansible-playbook $(EXTRA_PLAYBOOK_OPTS) ansible/site.yaml -e @ansible/fsx-ontap-vars.yml -e aws_region=$(REGION) -e cluster_name=$(CLUSTER) -e delete_resources=true
+	ansible-playbook $(EXTRA_PLAYBOOK_OPTS) ansible/site.yaml -e @ansible/vars/fsx-ontap-vars.yml -e delete_resources=true
